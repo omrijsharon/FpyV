@@ -1,7 +1,9 @@
 import matplotlib.pyplot as plt
 import matplotlib.tri as mtri
+import mpl_toolkits.mplot3d
 
 import numpy as np
+from icosphere import icosphere
 
 import kinematics
 import render3d
@@ -138,15 +140,23 @@ class Camera:
 
 
 class Target:
-    def __init__(self, position, radius):
+    def __init__(self, position, radius, nu):
         self.position = position
         self.radius = radius
+        self.vertices, self.faces = icosphere(nu=nu)
+        self.vertices = self.vertices * radius
+        self.current_vertices = self.vertices + self.position
 
+
+    #@TODO: add rotation matrix for a rolling ball.
     def update(self, position):
         self.position = position
+        self.current_vertices = self.vertices + self.position
 
-    def render(self):
-        pass
+    def render(self, **kwargs):
+        """ kwargs: facecolor, edgecolor, linewidth, alpha """
+        poly = mpl_toolkits.mplot3d.art3d.Poly3DCollection(self.current_vertices[self.faces], **kwargs)
+        ax.add_collection3d(poly)
 
 
 class Gate:
@@ -214,6 +224,7 @@ if __name__ == '__main__':
     """
     #transition test
     drone = Drone(drag_coef=0.12, dt=1e-2)
+    target = Target(np.array([0, 0, 0]), 0.5, nu=2)
     drone.reset(position=np.array([0, 0, 0]), velocity=np.array([0, 0, 0]), rotation_matrix=rotation_matrix_from_euler_angles(*np.array([0, 0, 0])))
     N = 1000
     rates_array = np.zeros((N, 3))
@@ -229,7 +240,7 @@ if __name__ == '__main__':
     ax, fig = render3d.init_3d_axis()
     for i in range(1, N):
         ax.clear()
-        if i % 50 == 0:
+        if i % 10 == 0:
             action = np.random.uniform(-1, 1, 4)
             action[-1] = (action[-1] + 1) / 2
             action[:-1] *= drone.max_rates/drone.action_scale * 0.1
