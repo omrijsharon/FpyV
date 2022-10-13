@@ -1,6 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
+from icosphere import icosphere
+import mpl_toolkits.mplot3d
 
 from src.utils.kinematics import rotate_body_by_rates
 
@@ -9,6 +11,13 @@ def init_3d_axis():
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
     return ax, fig
+
+
+def plot_3d_icosphere(ax, t, radius, nu,  **kwargs):
+    """ kwargs: facecolor, edgecolor, linewidth, alpha """
+    vertices, faces = icosphere(nu=nu)
+    poly = mpl_toolkits.mplot3d.art3d.Poly3DCollection(t + radius * vertices[faces], **kwargs)
+    ax.add_collection3d(poly)
 
 
 def plot_3d_points(ax, points,  **kwargs):
@@ -97,6 +106,8 @@ if __name__ == '__main__':
     R = np.eye(3)
     for i in range(n_frames):
         ax.clear()
+        plot_3d_icosphere(ax, np.array([0.5, 0, 0]), 0.3, 3, facecolor='r', edgecolor='k', linewidth=0.1, alpha=0.5)
+        plot_3d_icosphere(ax, np.array([0, 0, 0.5]), 0.3, 3, facecolor='g', edgecolor='k', linewidth=0.1, alpha=0.5)
         plot_3d_line(ax, points[:i+1])
         R = rotate_body_by_rates(R, np.array([40, 0, 0]), 0.1)
         plot_3d_rotation_matrix(ax, R, points[i], scale=0.5)

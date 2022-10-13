@@ -1,7 +1,9 @@
 import matplotlib.pyplot as plt
 import matplotlib.tri as mtri
+import mpl_toolkits.mplot3d
 
 import numpy as np
+from icosphere import icosphere
 
 import kinematics
 import render3d
@@ -23,12 +25,13 @@ class Drone:
         self.dt = dt
         self.mass = mass
         self.drag_coef = drag_coef
-        self.thrust_multiplier = 50
+        self.thrust_multiplier = 20
         self.max_rates = max_rates #deg/s
         self.prev_rates = None
         self.prev_thrust = None
         self.rates_transition_rate = 0.5
         self.thrust_transition_rate = 0.5
+        self.camera = Camera(camera_pitch_angle=45, position_relative_to_frame=np.array([1, 0, 0]), fov=150, resolution=(320, 240), focal_length=None)
 
     def reset(self, position, velocity, rotation_matrix):
         self.state = np.zeros(2 * self.dim)
@@ -43,6 +46,7 @@ class Drone:
         self.total_forces = np.zeros(self.dim)
         self.prev_rates = np.zeros(self.dim)
         self.prev_thrust = 0
+        self.camera.reset(drone_position=position, drone_rotation_matrix=rotation_matrix)
 
     @property
     def position(self):
@@ -77,7 +81,7 @@ class Drone:
         :param action: [roll_rate/self.action_scale, pitch_rate/self.action_scale, yaw_rate/self.action_scale, throttle]
         :param wind_velocity_vector: wind vector in world reference frame [3x1]
         :return: rotation_matrix [3x3] (how the world is rotated with respect to the drone), gyro_matrix, accelorometer
-                !!! IRL the drone doesn't know its state: Only IMU measurements !!!
+                !!! IRL the drone doesn't know its state: Only IMU measurements and orientation !!!
         """
         self.thrust, self.rates = self.action2force(action)
         self.drag_force = kinematics.calculate_drag(self.state, wind_velocity_vector, self.drag_coef)
@@ -85,6 +89,7 @@ class Drone:
         self.total_forces = self.thrust + self.gravity_force + self.drag_force
         self.acceleration = self.total_forces / self.mass
         self.update()
+        self.camera.update(self.position, self.rotation_matrix)
         angular_velocity_matrix = kinematics.rotation_matrix_from_euler_angles(*self.rates)
         return self.rotation_matrix.T, angular_velocity_matrix, self.rotation_matrix @ self.acceleration
 
@@ -105,38 +110,54 @@ class Drone:
 
 
 class Camera:
-    def __init__(self, fov, resolution, focal_length, position, rotation_matrix):
+    def __init__(self, camera_pitch_angle, position_relative_to_frame, fov, resolution, focal_length=None):
         self.fov = fov
         self.resolution = resolution
         self.focal_length = focal_length
-        self.position = position
-        self.rotation_matrix = rotation_matrix
+        self.relative_position = position_relative_to_frame
+        # for fixed camera angle (like in real FPV)
+        self.relative_rotation_matrix = rotation_matrix_from_euler_angles(0, -np.deg2rad(camera_pitch_angle), 0)
+        self.position = None
+        self.rotation_matrix = None
         self.image = None
 
-    def reset(self, position, rotation_matrix):
-        self.position = position
-        self.rotation_matrix = rotation_matrix
+    def reset(self, drone_position, drone_rotation_matrix):
+        self.position = drone_position + drone_rotation_matrix @ self.relative_position
+        self.rotation_matrix = drone_rotation_matrix @ self.relative_rotation_matrix
         self.image = np.zeros(self.resolution)
 
     def update(self, drone_position, drone_rotation_matrix):
-        self.position = drone_position
-        self.rotation_matrix = drone_rotation_matrix
+        self.position = drone_position + drone_rotation_matrix @ self.relative_position
+        self.rotation_matrix = drone_rotation_matrix @ self.relative_rotation_matrix
 
-    def render(self):
+    def render(self, ax):
+        render3d.plot_3d_points(ax, self.position, color='c')
+        render3d.plot_3d_rotation_matrix(ax, self.rotation_matrix, self.position, scale=0.5)
+
+    def render_image(self):
 
         return self.image
 
 
 class Target:
-    def __init__(self, position, radius):
+    def __init__(self, position, radius, nu):
         self.position = position
         self.radius = radius
+        self.vertices, self.faces = icosphere(nu=nu)
+        self.vertices = self.vertices * radius
+        self.current_vertices = self.vertices + self.position
 
+
+    #@TODO: add rotation matrix for a rolling ball.
     def update(self, position):
         self.position = position
+        self.current_vertices = self.vertices + self.position
 
-    def render(self):
-        pass
+    def render(self, **kwargs):
+        """ kwargs: facecolor, edgecolor, linewidth, alpha """
+        poly = mpl_toolkits.mplot3d.art3d.Poly3DCollection(self.current_vertices[self.faces], **kwargs)
+        ax.add_collection3d(poly)
+
 
 class Gate:
     def __init__(self, position, rotation_matrix, size, shape="rectangle", resolution=17):
@@ -202,7 +223,8 @@ if __name__ == '__main__':
     plt.render()
     """
     #transition test
-    drone = Drone(drag_coef=0.24, dt=5e-2)
+    drone = Drone(drag_coef=0.12, dt=1e-2)
+    target = Target(np.array([0, 0, 0]), 0.5, nu=2)
     drone.reset(position=np.array([0, 0, 0]), velocity=np.array([0, 0, 0]), rotation_matrix=rotation_matrix_from_euler_angles(*np.array([0, 0, 0])))
     N = 1000
     rates_array = np.zeros((N, 3))
@@ -218,16 +240,17 @@ if __name__ == '__main__':
     ax, fig = render3d.init_3d_axis()
     for i in range(1, N):
         ax.clear()
-        if i % 50 == 0:
+        if i % 10 == 0:
             action = np.random.uniform(-1, 1, 4)
             action[-1] = (action[-1] + 1) / 2
             action[:-1] *= drone.max_rates/drone.action_scale * 0.1
             # action = np.array([0, 0, 0, 0])
         drone.step(action=action, wind_velocity_vector=wind_velocity_vector)
-        drone.render(ax, rpy=True, velocity=True, thrust=True, drag=True, gravity=False, total_force=True)
+        drone.render(ax, rpy=True, velocity=False, thrust=False, drag=False, gravity=False, total_force=False)
+        drone.camera.render(ax)
         position_array[i, :] = drone.position
         render3d.plot_3d_line(ax, position_array[:i, :], color="blue", alpha=0.4)
-        render3d.show_plot(ax, fig, middle=drone.position, edge=20)
+        render3d.show_plot(ax, fig, middle=drone.position, edge=1.5)
         # rates_array[i, :] = drone.prev_rates
         # thrust_array[i, :] = drone.prev_thrust
         # plt.subplot(2, 1, 1)
