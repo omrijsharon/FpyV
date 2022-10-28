@@ -74,4 +74,21 @@ def focal_length_from_fov(fov, width, deg=True):
     return width / (2 * np.tan(fov / 2))
 
 
-
+def quaternion_to_rotation_matrix(q):
+    # https://www.euclideanspace.com/maths/geometry/rotations/conversions/quaternionToMatrix/index.htm
+    #
+    # | 1-2b^2-2c^2  2bc-2ad      2bd+2ac      |
+    # | 2bc+2ad      1-2a^2-2c^2  2cd-2ab      |
+    # | 2bd-2ac      2cd+2ab      1-2a^2-2b^2  |
+    #
+    # a = qw
+    # b = qx
+    # c = qy
+    # d = qz
+    qw = q[0]
+    qx = q[1]
+    qy = q[2]
+    qz = q[3]
+    return np.array([[1 - 2 * qy ** 2 - 2 * qz ** 2, 2 * qx * qy - 2 * qz * qw, 2 * qx * qz + 2 * qy * qw],
+                     [2 * qx * qy + 2 * qz * qw, 1 - 2 * qx ** 2 - 2 * qz ** 2, 2 * qy * qz - 2 * qx * qw],
+                     [2 * qx * qz - 2 * qy * qw, 2 * qy * qz + 2 * qx * qw, 1 - 2 * qx ** 2 - 2 * qy ** 2]])

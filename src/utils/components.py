@@ -246,11 +246,11 @@ if __name__ == '__main__':
             action[:-1] *= drone.max_rates/drone.action_scale * 0.1
             # action = np.array([0, 0, 0, 0])
         drone.step(action=action, wind_velocity_vector=wind_velocity_vector)
-        drone.render(ax, rpy=True, velocity=False, thrust=False, drag=False, gravity=False, total_force=False)
+        drone.render(ax, rpy=True, velocity=True, thrust=True, drag=True, gravity=True, total_force=False)
         drone.camera.render(ax)
         position_array[i, :] = drone.position
         render3d.plot_3d_line(ax, position_array[:i, :], color="blue", alpha=0.4)
-        render3d.show_plot(ax, fig, middle=drone.position, edge=1.5)
+        render3d.show_plot(ax, fig, middle=drone.position, edge=8.0)
         # rates_array[i, :] = drone.prev_rates
         # thrust_array[i, :] = drone.prev_thrust
         # plt.subplot(2, 1, 1)
