@@ -1,3 +1,4 @@
+import cv2
 import matplotlib.pyplot as plt
 import matplotlib.tri as mtri
 import mpl_toolkits.mplot3d
@@ -7,7 +8,7 @@ from icosphere import icosphere
 
 import kinematics
 import render3d
-from utils.helper_functions import rotation_matrix_from_euler_angles
+from utils.helper_functions import rotation_matrix_from_euler_angles, intrinsic_matrix, WORLD2CAM, CAM2WORLD
 
 
 class Drone:
@@ -31,7 +32,7 @@ class Drone:
         self.prev_thrust = None
         self.rates_transition_rate = 0.5
         self.thrust_transition_rate = 0.5
-        self.camera = Camera(camera_pitch_angle=45, position_relative_to_frame=np.array([1, 0, 0]), fov=150, resolution=(320, 240), focal_length=None)
+        self.camera = Camera(camera_pitch_angle=25, position_relative_to_frame=np.array([0.5, 0.0, 0.0]), fov=120, resolution=(320, 240), focal_length=None)
 
     def reset(self, position, velocity, rotation_matrix):
         self.state = np.zeros(2 * self.dim)
@@ -62,7 +63,7 @@ class Drone:
                        throttle is expected to be in range [0, 1]
         :return: thrust [3x1], rates [3x1]  in world reference frame
         """
-        self.rates[:self.dim] = np.clip(action[:self.dim] * self.action_scale, -self.max_rates, self.max_rates)
+        self.rates[:self.dim] = np.clip(-action[:self.dim] * self.action_scale, -self.max_rates, self.max_rates)
         rates = self.rates[:self.dim] * self.rates_transition_rate + \
                 self.prev_rates * (1 - self.rates_transition_rate)
         self.prev_rates = rates
@@ -110,8 +111,7 @@ class Drone:
 
 
 class Camera:
-    def __init__(self, camera_pitch_angle, position_relative_to_frame, fov, resolution, focal_length=None):
-        self.fov = fov
+    def __init__(self, camera_pitch_angle, position_relative_to_frame, resolution, fov=None, focal_length=None):
         self.resolution = resolution
         self.focal_length = focal_length
         self.relative_position = position_relative_to_frame
@@ -120,6 +120,43 @@ class Camera:
         self.position = None
         self.rotation_matrix = None
         self.image = None
+        self.intrinsic_matrix = None
+        self.focal_length = focal_length
+        self.fov = fov #diagonal fov
+        if focal_length is None and fov is not None:
+            self.focal_length = self.convert_fov_to_focal_length(fov, self.resolution)
+        elif focal_length is not None and fov is None:
+            self.fov = self.convert_focal_length_to_fov(self.focal_length, self.resolution)
+        if self.focal_length is not None:
+            # 3x3 intrinsic matrix using focal length and resolution
+            self.intrinsic_matrix = intrinsic_matrix(self.focal_length, self.focal_length, self.resolution[0]/2, self.resolution[1]/2)
+
+    def convert_fov_to_focal_length(self, fov, resolution):
+        # fov in degrees
+        return resolution[0] / (2 * np.tan(np.deg2rad(fov) / 2))
+
+    def convert_focal_length_to_fov(self, focal_length, resolution):
+        return np.rad2deg(2 * np.arctan(resolution[0] / (2 * focal_length)))
+
+    def calculate_fovs_from_resolution(self, resolution, diagonal_fov):
+        """
+        FOV_Horizontal = 2 * atan(W/2/f) = 2 * atan2(W/2, f)  radians
+        FOV_Vertical   = 2 * atan(H/2/f) = 2 * atan2(H/2, f)  radians
+        FOV_Diagonal   = 2 * atan2(sqrt(W^2 + H^2)/2, f)    radians
+        :param resolution: [width, height]
+        :param diagonal_fov: in degrees
+        :return: fov_horizontal, fov_vertical
+        """
+        fov_horizontal = np.rad2deg(2 * np.arctan2(resolution[0] / 2, self.focal_length))
+        fov_vertical = np.rad2deg(2 * np.arctan2(resolution[1] / 2, self.focal_length))
+        return fov_horizontal, fov_vertical # in degrees
+
+    def set_intrinsic_matrix(self, intrinsic_matrix):
+        self.intrinsic_matrix = intrinsic_matrix
+
+    @property
+    def extrinsic_matrix(self):
+        return np.hstack([self.rotation_matrix, self.position.reshape(-1, 1)])
 
     def reset(self, drone_position, drone_rotation_matrix):
         self.position = drone_position + drone_rotation_matrix @ self.relative_position
@@ -134,9 +171,42 @@ class Camera:
         render3d.plot_3d_points(ax, self.position, color='c')
         render3d.plot_3d_rotation_matrix(ax, self.rotation_matrix, self.position, scale=0.5)
 
-    def render_image(self):
+    def render_image(self, objects_list):
+        points = [obj.points for obj in objects_list]
+        points = np.vstack(points)
+        points = self.extrinsic_matrix @ np.vstack([points.T, np.ones(points.shape[0])])
+        # points = self.intrinsic_matrix @ points
+        # points = points - self.position
+        # points = self.rotation_matrix.T @ points.T
+        # points = points.T
+        points = WORLD2CAM @ points
+        points = self.intrinsic_matrix @ points
+        points = points.T
+        points = points[:, :2] / points[:, 2].reshape(-1, 1)
+        points = points.astype(int)
+        self.image = np.zeros(self.resolution[::-1])
+        for point in points:
+            if 0 <= point[0] < self.resolution[0] and 0 <= point[1] < self.resolution[1]:
+                self.image[point[1], point[0]] = 1
+        return self.image[::-1, ::-1]
 
-        return self.image
+    def render_image_with_depth(self, objects_list):
+        points = [obj.points for obj in objects_list]
+        points = np.vstack(points)
+        points = points - self.position
+        points = self.rotation_matrix.T @ points.T
+        points = points.T
+        points = points[:, :2] / points[:, 2:]
+        points = self.intrinsic_matrix @ points.T
+        points = points.T
+        points = points.astype(int)
+        self.image = np.zeros(self.resolution)
+        depth = np.zeros(self.resolution)
+        for point in points:
+            if 0 <= point[0] < self.resolution[0] and 0 <= point[1] < self.resolution[1]:
+                self.image[point[1], point[0]] = 1
+                depth[point[1], point[0]] = point[2]
+        return self.image, depth
 
 
 class Target:
@@ -147,13 +217,16 @@ class Target:
         self.vertices = self.vertices * radius
         self.current_vertices = self.vertices + self.position
 
+    @property
+    def points(self):
+        return self.current_vertices
 
     #@TODO: add rotation matrix for a rolling ball.
     def update(self, position):
         self.position = position
         self.current_vertices = self.vertices + self.position
 
-    def render(self, **kwargs):
+    def render(self, ax, **kwargs):
         """ kwargs: facecolor, edgecolor, linewidth, alpha """
         poly = mpl_toolkits.mplot3d.art3d.Poly3DCollection(self.current_vertices[self.faces], **kwargs)
         ax.add_collection3d(poly)
@@ -182,6 +255,10 @@ class Gate:
         else:
             raise NotImplementedError
         self.corners = np.vstack((self.corners, self.corners[0]))
+
+    @property
+    def points(self):
+        return self.corners
 
     @property
     def normal(self):
@@ -223,8 +300,9 @@ if __name__ == '__main__':
     plt.render()
     """
     #transition test
+    dim = 2
     drone = Drone(drag_coef=0.12, dt=1e-2)
-    target = Target(np.array([0, 0, 0]), 0.5, nu=2)
+    target = Target(np.array([3, 0, 0.0]), 0.5, nu=3)
     drone.reset(position=np.array([0, 0, 0]), velocity=np.array([0, 0, 0]), rotation_matrix=rotation_matrix_from_euler_angles(*np.array([0, 0, 0])))
     N = 1000
     rates_array = np.zeros((N, 3))
@@ -234,11 +312,11 @@ if __name__ == '__main__':
     rates_array[0, :] = drone.prev_rates
     thrust_array[0, :] = drone.prev_thrust
     position_array[0, :] = drone.position
-    action = np.random.uniform(-1, 1, 4)
-    action[-1] = (action[-1] + 1) / 2
-    action[:-1] *= drone.max_rates / drone.action_scale
+    # action = np.random.uniform(-1, 1, 4)
+    # action[-1] = (action[-1] + 1) / 2
+    # action[:-1] *= drone.max_rates / drone.action_scale
     ax, fig = render3d.init_3d_axis()
-    for i in range(1, N):
+    for i in range(0, N):
         ax.clear()
         if i % 10 == 0:
             action = np.random.uniform(-1, 1, 4)
@@ -246,11 +324,20 @@ if __name__ == '__main__':
             action[:-1] *= drone.max_rates/drone.action_scale * 0.1
             # action = np.array([0, 0, 0, 0])
         drone.step(action=action, wind_velocity_vector=wind_velocity_vector)
-        drone.render(ax, rpy=True, velocity=True, thrust=True, drag=True, gravity=True, total_force=False)
-        drone.camera.render(ax)
-        position_array[i, :] = drone.position
-        render3d.plot_3d_line(ax, position_array[:i, :], color="blue", alpha=0.4)
-        render3d.show_plot(ax, fig, middle=drone.position, edge=8.0)
+        if dim == 3:
+            # render 3d world
+            drone.render(ax, rpy=True, velocity=True, thrust=True, drag=True, gravity=True, total_force=False)
+            drone.camera.render(ax)
+            position_array[i, :] = drone.position
+            render3d.plot_3d_line(ax, position_array[:i, :], color="blue", alpha=0.4)
+            target.render(ax)
+            render3d.show_plot(ax, fig, middle=drone.position, edge=3.0)
+        else:
+            # render what the drone camera sees
+            img = 255 * drone.camera.render_image([target]).astype(np.uint8)
+            cv2.imshow("img", img)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
         # rates_array[i, :] = drone.prev_rates
         # thrust_array[i, :] = drone.prev_thrust
         # plt.subplot(2, 1, 1)

@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from utils.helper_functions import quaternion_to_rotation_matrix
-from utils.render3d import init_3d_axis, plot_3d_rotation_matrix, show_plot, plot_3d_line
+from utils.render3d import init_3d_axis, plot_3d_rotation_matrix, show_plot, plot_3d_line, plot_3d_points
 
 
 def check_which_port():
@@ -55,6 +55,7 @@ def read_serial_stream():
             quat_line = [l for l in line if "quaternion" in l]
             rot_mat_line = [l for l in line if "Rotation matrix" in l]
             position_line = [l for l in line if "Position" in l]
+            acceleration_line = [l for l in line if "Acceleration" in l]
             if len(position_line) > 1:
                 print("count_elements_in_str_line(position_line)", count_elements_in_str_line(position_line))
                 if count_elements_in_str_line(position_line) == 3:
@@ -66,7 +67,17 @@ def read_serial_stream():
                 points = np.array([float(x) for x in position_line.split()]) / 16384
                 points_list = np.vstack((points_list, points))
                 plot_3d_line(ax, points_list, color='b')
-
+            if len(acceleration_line) > 1:
+                print("count_elements_in_str_line(acceleration_line)", count_elements_in_str_line(acceleration_line))
+                if count_elements_in_str_line(acceleration_line) == 3:
+                    acceleration_line = acceleration_line[-1]
+                else:
+                    acceleration_line = acceleration_line[-2]
+                print(acceleration_line, len(acceleration_line))
+                acceleration_line = acceleration_line.replace('Acceleration: ', '')
+                acceleration = np.array([float(x) for x in acceleration_line.split()]) / 16384
+                # points_list = np.vstack((points_list, acceleration))[-50:]
+                # plot_3d_points(ax, points_list, color='r')
             if len(quat_line) > 1:
                 if count_elements_in_str_line(quat_line) == 4:
                     quat_line = quat_line[-1]
@@ -89,7 +100,7 @@ def read_serial_stream():
                 rot_mat_line = rot_mat_line.replace('Rotation matrix: ', '')
                 R = np.array([float(x) / 16384.0 for x in rot_mat_line.split()]).reshape(3, 3)
                 plot_3d_rotation_matrix(ax, R, points, scale=0.2)
-                show_plot(ax, fig, middle=points, edge=0.5)
+            show_plot(ax, fig, middle=points, edge=0.5)
     except KeyboardInterrupt:
         # Close serial port
         ser.close()
