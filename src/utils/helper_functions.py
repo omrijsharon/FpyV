@@ -1,8 +1,12 @@
 import numpy as np
 
-WORLD2CAM = np.array([[0, 1, 0], [0, 0, -1], [1, 0, 0]]) # converts xyz to uvw
-CAM2WORLD = np.array([[0, 0, 1], [-1, 0, 0], [0, -1, 0]]) # converts uvw to xyz
+# WORLD2CAM = np.array([[0, 0, 1],
+#                       [1, 0, 0],
+#                       [0, -1, 0]]) # converts xyz to uvw
 
+WORLD2CAM = np.array([[0, 1, 0],
+                      [0, 0, -1],
+                      [1, 0, 0]]) # converts xyz to uvw
 
 def intrinsic_matrix(fx, fy, cx, cy):
     return np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
