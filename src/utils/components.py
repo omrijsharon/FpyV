@@ -6,7 +6,7 @@ import mpl_toolkits.mplot3d
 import numpy as np
 from icosphere import icosphere
 
-from utils import kinematics, render3d
+from utils import kinematics, render3d, get_sticks
 from utils.helper_functions import rotation_matrix_from_euler_angles, intrinsic_matrix, WORLD2CAM
 
 
@@ -25,13 +25,13 @@ class Drone:
         self.dt = dt
         self.mass = mass
         self.drag_coef = drag_coef
-        self.thrust_multiplier = 20
+        self.thrust_multiplier = 100
         self.max_rates = max_rates #deg/s
         self.prev_rates = None
         self.prev_thrust = None
-        self.rates_transition_rate = 1e-1
-        self.thrust_transition_rate = 1e-1
-        self.camera = Camera(camera_pitch_angle=0, position_relative_to_frame=np.array([1.0, 0.0, 0.0]), fov=120, resolution=(2 * 320, 2 * 240), focal_length=None)
+        self.rates_transition_rate = 5e-1
+        self.thrust_transition_rate = 5e-1
+        self.camera = Camera(camera_pitch_angle=25, position_relative_to_frame=np.array([0.5, 0.0, 0.0]), fov=120, resolution=(2 * 320, 2 * 240), focal_length=None)
 
     def reset(self, position, velocity, rotation_matrix):
         self.state = np.zeros(2 * self.dim)
@@ -85,7 +85,7 @@ class Drone:
         """
         self.thrust, self.rates = self.action2force(action)
         self.drag_force = kinematics.calculate_drag(self.state, wind_velocity_vector, self.drag_coef)
-        self.gravity_force = kinematics.gravity_vector(self.mass, g=0.0)
+        self.gravity_force = kinematics.gravity_vector(self.mass, g=9.81)
         self.total_forces = self.thrust + self.gravity_force + self.drag_force
         self.acceleration = self.total_forces / self.mass
         self.update()
@@ -115,7 +115,7 @@ class Camera:
         self.focal_length = focal_length
         self.relative_position = position_relative_to_frame
         # for fixed camera angle (like in real FPV)
-        self.relative_rotation_matrix = WORLD2CAM.T @ rotation_matrix_from_euler_angles(0, -np.deg2rad(camera_pitch_angle), 0)
+        self.relative_rotation_matrix = WORLD2CAM.T @ rotation_matrix_from_euler_angles(np.deg2rad(camera_pitch_angle), 0, 0)
         self.position = None
         self.rotation_matrix = None
         self.image = None
@@ -321,16 +321,20 @@ if __name__ == '__main__':
     plt.render()
     """
     #transition test
+    rc = get_sticks.Joystick()
+    run = rc.status
+    rc.calibrate(r"C:\Users\omrijsharon\PycharmProjects\FpyV\config\frsky.json", load_calibration_file=True)
+
     dim = 2
-    n_tragets = 1
-    drone = Drone(drag_coef=0.12, dt=1e-2)
-    targets = [Target(np.array([5, 0, 4]) + 0.01 * np.random.randn(3), 2 * np.abs(np.random.randn()), nu=2) for _ in range(n_tragets)]
-    ground = Ground(size=20, resolution=100)
+    n_tragets = 15
+    drone = Drone(drag_coef=0.12, dt=2e-2)
+    targets = [Target(np.array([0, 0, 0]) + 5 * np.random.randn(3), 0.5 * np.abs(np.random.randn()), nu=3) for _ in range(n_tragets)]
+    ground = Ground(size=50, resolution=100)
     drone.reset(position=np.array([0, 0, 4]), velocity=np.array([0, 0, 0]), rotation_matrix=rotation_matrix_from_euler_angles(*np.array([0, 0, 0])))
-    N = 1000
-    rates_array = np.zeros((N, 3))
-    thrust_array = np.zeros((N, 1))
-    position_array = np.zeros((N, 3))
+    timesteps = 10000
+    rates_array = np.zeros((timesteps, 3))
+    thrust_array = np.zeros((timesteps, 1))
+    position_array = np.zeros((timesteps, 3))
     wind_velocity_vector = np.array([0, 0, 0])
     rates_array[0, :] = drone.prev_rates
     thrust_array[0, :] = drone.prev_thrust
@@ -339,15 +343,16 @@ if __name__ == '__main__':
     # action[-1] = (action[-1] + 1) / 2
     # action[:-1] *= drone.max_rates / drone.action_scale
     ax, fig = render3d.init_3d_axis()
-    for i in range(0, N):
+    for i in range(0, timesteps):
         ax.clear()
-        if i % 100 == 0:
+        if i % 1 == 0:
+            throttle, roll, pitch, arm, _, yaw = rc.calib_read()
             # action = np.random.uniform(-1, 1, 4)
             # action[-1] = (action[-1] + 1) / 2
             # action[:-1] *= drone.max_rates/drone.action_scale * 0.4
-            action = np.array([0.0, 0.0, 0.1, 0])
+            action = np.array([-roll, pitch, yaw, throttle])
         drone.step(action=action, wind_velocity_vector=wind_velocity_vector)
-        print((targets[0].points - drone.camera.position).mean(axis=0))
+        # print((targets[0].points - drone.camera.position).mean(axis=0))
         if dim == 3:
             # render 3d world
             drone.render(ax, rpy=True, velocity=True, thrust=True, drag=True, gravity=True, total_force=False)
@@ -356,12 +361,12 @@ if __name__ == '__main__':
             render3d.plot_3d_line(ax, position_array[:i, :], color="blue", alpha=0.4)
             [target.render(ax, alpha=0.2) for target in targets]
             ground.render(ax, alpha=0.1)
-            render3d.show_plot(ax, fig, middle=drone.position, edge=4)
+            render3d.show_plot(ax, fig, middle=drone.position, edge=2)
             # print(f"position{np.round(drone.position, 2)}")
         else:
             # render what the drone camera sees
-            img = 255 * drone.camera.render_image([*targets, ground]).astype(np.uint8)
-            # img = drone.camera.render_depth_image([*targets, ground], max_depth=30)
+            # img = 255 * drone.camera.render_image([*targets, ground]).astype(np.uint8)
+            img = drone.camera.render_depth_image([*targets, ground], max_depth=15)
             img = cv2.putText(img.astype(np.uint8), f"position{np.round(drone.camera.position,2)}", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
             cv2.imshow("img", img)
             if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -374,4 +379,4 @@ if __name__ == '__main__':
         # plt.plot(thrust_array[:i, :])
         # plt.pause(0.01)
 
-    plt.show()
+    # plt.show()

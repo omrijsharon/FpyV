@@ -40,7 +40,8 @@ def rotation_matrix_from_euler_angles(roll, pitch, yaw):
     R_x = rotation_matrix(roll, 'x')
     R_y = rotation_matrix(pitch, 'y')
     R_z = rotation_matrix(yaw, 'z')
-    return R_z @ R_y @ R_x
+    # return R_z @ R_y @ R_x
+    return R_x @ R_y @ R_z
 
 
 def rotation_matrix_to_quaternion(R):
