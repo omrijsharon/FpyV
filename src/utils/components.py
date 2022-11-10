@@ -101,21 +101,35 @@ class Drone:
     def get_gravity_force_in_drone_ref_frame(self):
         return self.rotation_matrix @ kinematics.gravity_vector(self.mass, g=9.81)
 
-    def calculate_needed_force(self, pixel, ref_frame='world'):
+    def calculate_needed_force_orientation(self, pixel, ref_frame='world', multiplier=1, mode="level"):
         """
         calculating the force needed to move the drone to a pixel in the image
         :param pixel: [x, y] pixel coordinates
         :param ref_frame: 'world' or 'drone'
+        :param multiplier: how much force to apply
+        :param mode: 'level' or 'frontarget' where the drone is leveled or facing the target
         :return: force vector [3x1] in world reference frame
         """
-        dir2target = self.camera.get_direction_to_pixel(pixel, ref_frame=ref_frame)
+        dir2target = multiplier * self.camera.get_direction_to_pixel(pixel, ref_frame=ref_frame)
         if ref_frame == 'world':
-            return dir2target - kinematics.gravity_vector(self.mass, g=9.81)
+            gravity = kinematics.gravity_vector(self.mass, g=9.81)
         elif ref_frame == 'drone':
-            return dir2target - self.get_gravity_force_in_drone_ref_frame()
+            gravity = self.get_gravity_force_in_drone_ref_frame()
         else:
             raise ValueError('Unknown reference frame')
-
+        force_vector = dir2target - gravity
+        # level the drone, keep the y axis at the horizon
+        if mode == "level":
+            horizon_vector = np.cross(force_vector, gravity)
+            front_vector = np.cross(horizon_vector, force_vector)
+        elif mode == "frontarget":
+            horizon_vector = np.cross(force_vector, dir2target)
+            front_vector = np.cross(horizon_vector, force_vector)
+        else:
+            raise ValueError('Unknown mode')
+        rotation_to_apply_force = np.stack([front_vector, horizon_vector, force_vector], axis=1)
+        rotation_to_apply_force = rotation_to_apply_force / np.linalg.norm(rotation_to_apply_force, axis=0)
+        return rotation_to_apply_force, np.linalg.norm(force_vector)
 
     def render(self, ax, rpy=True, velocity=False, thrust=False, drag=False, gravity=False, total_force=True):
         render3d.plot_3d_points(ax, self.position, color='k')
@@ -370,9 +384,9 @@ if __name__ == '__main__':
     dim = 3
     n_tragets = 1
     drone = Drone(drag_coef=0.12, dt=2e-2)
-    targets = [Target(np.array([5, 0, 4]) + 0.1 * np.random.randn(3), 0.1 * np.abs(np.random.randn()), nu=3) for _ in range(n_tragets)]
+    targets = [Target(np.array([5, 0, 4]) + 0.1 * np.random.randn(3), 0.5 * np.abs(np.random.randn()), nu=3) for _ in range(n_tragets)]
     ground = Ground(size=50, resolution=100)
-    drone.reset(position=np.array([0, 0, 4]), velocity=np.array([0, 0, 0]), rotation_matrix=rotation_matrix_from_euler_angles(*np.array([0, 0, 0])))
+    drone.reset(position=np.array([0, 0, 7]), velocity=np.array([0, 0, 0]), rotation_matrix=rotation_matrix_from_euler_angles(*np.array([0, 0, 0])))
     timesteps = 10000
     rates_array = np.zeros((timesteps, 3))
     thrust_array = np.zeros((timesteps, 1))
@@ -386,6 +400,7 @@ if __name__ == '__main__':
     # action[-1] = (action[-1] + 1) / 2
     # action[:-1] *= drone.max_rates / drone.action_scale
     ax, fig = render3d.init_3d_axis()
+    sign = 1
     for i in range(0, timesteps):
         ax.clear()
         if i % 1 == 0:
@@ -394,7 +409,7 @@ if __name__ == '__main__':
             # action[-1] = (action[-1] + 1) / 2
             # action[:-1] *= drone.max_rates/drone.action_scale * 0.4
             # action = np.array([-roll, pitch, yaw, throttle])
-            action = np.array([0, 0, 0, 0])
+            action = np.array([0, 0, sign * 0.6, 0])
         drone.step(action=action, wind_velocity_vector=wind_velocity_vector)
         # print((targets[0].points - drone.camera.position).mean(axis=0))
         if dim == 3:
@@ -409,7 +424,14 @@ if __name__ == '__main__':
             img = drone.camera.render_depth_image([*targets], max_depth=15)
             # direction2target = drone.camera.get_direction_to_pixel(np.array(np.where(img > 0)).mean(1)[::-1], ref_frame="world")
             direction2target = drone.camera.get_direction_to_pixel([320, 240], ref_frame="drone")
-            render3d.plot_3d_arrows(ax, drone.position, direction2target, color='m', alpha=1)
+            target_pixels = np.array(np.where(img > 0))
+            if target_pixels.shape[1] == 0:
+                sign *= -1
+            else:
+                target_pixels = target_pixels.mean(1)[::-1]
+                rot_mat, force_size = drone.calculate_needed_force_orientation(target_pixels, ref_frame='world', multiplier=20, mode="frontarget")
+                render3d.plot_3d_rotation_matrix(ax, rot_mat, drone.position, scale=2)
+            # render3d.plot_3d_arrows(ax, drone.position, direction2target, color='m', alpha=1)
             render3d.show_plot(ax, fig, middle=drone.position, edge=5)
             # print(f"position{np.round(drone.position, 2)}")
         else:
