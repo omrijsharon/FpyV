@@ -29,9 +29,14 @@ class Drone:
         self.max_rates = max_rates #deg/s
         self.prev_rates = None
         self.prev_thrust = None
-        self.rates_transition_rate = 5e-1
-        self.thrust_transition_rate = 5e-1
-        self.camera = Camera(camera_pitch_angle=25, position_relative_to_frame=np.array([0.5, 0.0, 0.0]), fov=120, resolution=(2 * 320, 2 * 240), focal_length=None)
+        self.rates_transition_rate = 1e-1
+        self.thrust_transition_rate = 2e-1
+        self.camera = Camera(camera_pitch_angle=25,
+                             position_relative_to_frame=np.array([0.5, 0.0, 0.0]),
+                             fov=120,
+                             resolution=(2 * 320, 2 * 240),
+                             focal_length=None
+                             )
 
     def reset(self, position, velocity, rotation_matrix):
         self.state = np.zeros(2 * self.dim)
@@ -92,6 +97,25 @@ class Drone:
         self.camera.update(self.position, self.rotation_matrix)
         angular_velocity_matrix = kinematics.rotation_matrix_from_euler_angles(*self.rates)
         return self.rotation_matrix.T, angular_velocity_matrix, self.rotation_matrix @ self.acceleration
+
+    def get_gravity_force_in_drone_ref_frame(self):
+        return self.rotation_matrix @ kinematics.gravity_vector(self.mass, g=9.81)
+
+    def calculate_needed_force(self, pixel, ref_frame='world'):
+        """
+        calculating the force needed to move the drone to a pixel in the image
+        :param pixel: [x, y] pixel coordinates
+        :param ref_frame: 'world' or 'drone'
+        :return: force vector [3x1] in world reference frame
+        """
+        dir2target = self.camera.get_direction_to_pixel(pixel, ref_frame=ref_frame)
+        if ref_frame == 'world':
+            return dir2target - kinematics.gravity_vector(self.mass, g=9.81)
+        elif ref_frame == 'drone':
+            return dir2target - self.get_gravity_force_in_drone_ref_frame()
+        else:
+            raise ValueError('Unknown reference frame')
+
 
     def render(self, ax, rpy=True, velocity=False, thrust=False, drag=False, gravity=False, total_force=True):
         render3d.plot_3d_points(ax, self.position, color='k')
@@ -165,6 +189,25 @@ class Camera:
         self.position = drone_position + drone_rotation_matrix @ self.relative_position
         self.rotation_matrix = drone_rotation_matrix @ self.relative_rotation_matrix
 
+    def get_direction_to_pixel(self, pixel, ref_frame='world'):
+        """
+        calculating a vector norm 1 pointing from camera/drone to the pixel
+        :param pixel: [h, w]
+        :param ref_frame: 'world', 'drone' or 'camera'
+        :return: direction vector in world frame
+        """
+        pixel = np.array(pixel)
+        pixel = np.hstack([pixel, 1])
+        if ref_frame == 'world':
+            direction = self.rotation_matrix @ np.linalg.inv(self.intrinsic_matrix) @ pixel
+        elif ref_frame == 'drone':
+            direction = self.relative_rotation_matrix @ np.linalg.inv(self.intrinsic_matrix) @ pixel
+        elif ref_frame == 'camera':
+            direction = np.linalg.inv(self.intrinsic_matrix) @ pixel
+        else:
+            raise ValueError('ref_frame must be world, drone or camera')
+        return direction / np.linalg.norm(direction)
+
     def render(self, ax):
         render3d.plot_3d_points(ax, self.position, color='c')
         render3d.plot_3d_rotation_matrix(ax, self.rotation_matrix, self.position, scale=0.5)
@@ -174,7 +217,6 @@ class Camera:
         # add row to extrinsic matrix to make it 4x4
         extrinsic_matrix = np.vstack([self.extrinsic_matrix, np.array([0, 0, 0, 1])])
         return self.intrinsic_matrix @ np.linalg.inv(extrinsic_matrix)[:3, :]
-        # return self.intrinsic_matrix @ extrinsic_matrix[:3, :]
 
     def project(self, objects_list):
         points = [obj.points.copy() for obj in objects_list]
@@ -325,10 +367,10 @@ if __name__ == '__main__':
     run = rc.status
     rc.calibrate(r"C:\Users\omrijsharon\PycharmProjects\FpyV\config\frsky.json", load_calibration_file=True)
 
-    dim = 2
-    n_tragets = 15
+    dim = 3
+    n_tragets = 1
     drone = Drone(drag_coef=0.12, dt=2e-2)
-    targets = [Target(np.array([0, 0, 0]) + 5 * np.random.randn(3), 0.5 * np.abs(np.random.randn()), nu=3) for _ in range(n_tragets)]
+    targets = [Target(np.array([5, 0, 4]) + 0.1 * np.random.randn(3), 0.1 * np.abs(np.random.randn()), nu=3) for _ in range(n_tragets)]
     ground = Ground(size=50, resolution=100)
     drone.reset(position=np.array([0, 0, 4]), velocity=np.array([0, 0, 0]), rotation_matrix=rotation_matrix_from_euler_angles(*np.array([0, 0, 0])))
     timesteps = 10000
@@ -339,6 +381,7 @@ if __name__ == '__main__':
     rates_array[0, :] = drone.prev_rates
     thrust_array[0, :] = drone.prev_thrust
     position_array[0, :] = drone.position
+
     # action = np.random.uniform(-1, 1, 4)
     # action[-1] = (action[-1] + 1) / 2
     # action[:-1] *= drone.max_rates / drone.action_scale
@@ -350,23 +393,29 @@ if __name__ == '__main__':
             # action = np.random.uniform(-1, 1, 4)
             # action[-1] = (action[-1] + 1) / 2
             # action[:-1] *= drone.max_rates/drone.action_scale * 0.4
-            action = np.array([-roll, pitch, yaw, throttle])
+            # action = np.array([-roll, pitch, yaw, throttle])
+            action = np.array([0, 0, 0, 0])
         drone.step(action=action, wind_velocity_vector=wind_velocity_vector)
         # print((targets[0].points - drone.camera.position).mean(axis=0))
         if dim == 3:
             # render 3d world
-            drone.render(ax, rpy=True, velocity=True, thrust=True, drag=True, gravity=True, total_force=False)
+            # drone.render(ax, rpy=True, velocity=True, thrust=True, drag=True, gravity=True, total_force=False)
+            drone.render(ax, rpy=True, velocity=False, thrust=False, drag=False, gravity=True, total_force=False)
             drone.camera.render(ax)
             position_array[i, :] = drone.position
             render3d.plot_3d_line(ax, position_array[:i, :], color="blue", alpha=0.4)
             [target.render(ax, alpha=0.2) for target in targets]
-            ground.render(ax, alpha=0.1)
-            render3d.show_plot(ax, fig, middle=drone.position, edge=2)
+            # ground.render(ax, alpha=0.1)
+            img = drone.camera.render_depth_image([*targets], max_depth=15)
+            # direction2target = drone.camera.get_direction_to_pixel(np.array(np.where(img > 0)).mean(1)[::-1], ref_frame="world")
+            direction2target = drone.camera.get_direction_to_pixel([320, 240], ref_frame="drone")
+            render3d.plot_3d_arrows(ax, drone.position, direction2target, color='m', alpha=1)
+            render3d.show_plot(ax, fig, middle=drone.position, edge=5)
             # print(f"position{np.round(drone.position, 2)}")
         else:
             # render what the drone camera sees
             # img = 255 * drone.camera.render_image([*targets, ground]).astype(np.uint8)
-            img = drone.camera.render_depth_image([*targets, ground], max_depth=15)
+            img = drone.camera.render_depth_image([*targets], max_depth=15)
             img = cv2.putText(img.astype(np.uint8), f"position{np.round(drone.camera.position,2)}", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
             cv2.imshow("img", img)
             if cv2.waitKey(1) & 0xFF == ord('q'):
