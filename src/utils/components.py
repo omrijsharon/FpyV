@@ -22,7 +22,7 @@ class Drone:
         self.rc.calibrate(params["drone"]["joystick_calib_path"], load_calibration_file=True)
 
         self.dim = 3
-        self.max_rates = params["drone"]["joystick_calib_path"]["max_rates"] #deg/s
+        self.max_rates = params["drone"]["max_rates"] #deg/s
         self.state = None # [x, y, z, vx, vy, vz] in 3d
         self.rotation_matrix = None # R [3x3] in 3d
         self.acceleration = None
@@ -33,7 +33,7 @@ class Drone:
         self.total_forces = None
         self.dt = params["simulator"]["dt"]
         self.mass = params["drone"]["mass"] / 1000 #kg
-        self.drag_coef = params["drone"]["drag_coef"]
+        self.drag_coef = params["drone"]["drag_coefficient"]
         self.thrust_multiplier = 80
         self.prev_rates = None
         self.prev_thrust = None
@@ -444,8 +444,8 @@ if __name__ == '__main__':
     params = yaml_helper.yaml_reader(r"C:\Users\omrijsharon\PycharmProjects\FpyV\config\params.yaml")
     dim = params["simulator"]["render_dim"]
     drone = Drone(params)
-    targets = generate_targets(*params["simulator"]["targets"])
-    gates = generate_track(*params["simulator"]["gates"])
+    targets = generate_targets(**params["simulator"]["targets"])
+    gates = generate_track(**params["simulator"]["track"])
     ground = Ground(size=30, resolution=100)
     drone.reset(position=np.array(params["drone"]["initial_position"]), velocity=np.array(params["drone"]["initial_velocity"]), ypr=np.array(params["drone"]["initial_orientation"]))
     timesteps = 10000
@@ -465,13 +465,13 @@ if __name__ == '__main__':
     for i in range(0, timesteps):
         ax.clear()
         if i % 1 == 0:
-            throttle, roll, pitch, arm, _, yaw = rc.calib_read()
-            action = np.array([-roll, pitch, yaw, throttle])
+            # throttle, roll, pitch, arm, _, yaw = rc.calib_read()
+            # action = np.array([-roll, pitch, yaw, throttle])
             # action = np.random.uniform(-1, 1, 4)
             # action[-1] = (action[-1] + 1) / 2
             # action[:-1] *= drone.max_rates/drone.action_scale * 0.4
-            # action = np.array([0.2, 0, 0*sign * 0.6, 0])
-        drone.step(action=action, wind_velocity_vector=wind_velocity_vector)
+            action = np.array([0.2, 0, 0*sign * 0.6, 0])
+        drone.step(action=None, wind_velocity_vector=wind_velocity_vector)
         if drone.done:
             break
         # print((targets[0].points - drone.camera.position).mean(axis=0))
