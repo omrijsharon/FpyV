@@ -85,11 +85,11 @@ class Drone:
                        throttle is expected to be in range [-1, 1]
         :return: thrust [3x1], rates [3x1]  in world reference frame
         """
-        self.rates[:self.dim] = np.clip(-action[:self.dim] * self.max_rates, -self.max_rates, self.max_rates)
-        rates = self.rates[:self.dim] * self.rates_transition_rate + \
+        action2rates = np.clip(-action[:self.dim] * self.max_rates, -self.max_rates, self.max_rates)
+        rates = action2rates * self.rates_transition_rate + \
                 self.prev_rates * (1 - self.rates_transition_rate)
         self.prev_rates = rates
-        thrust_scalar = np.clip((action[self.dim]+1) / 2, 0, 1) * self.thrust_multiplier * self.thrust_transition_rate + \
+        thrust_scalar = np.clip((action[self.dim] + 1) / 2, 0, 1) * self.thrust_multiplier * self.thrust_transition_rate + \
                         self.prev_thrust * (1 - self.thrust_transition_rate)
         self.prev_thrust = thrust_scalar
         trust = kinematics.thrust_vector(thrust_scalar, self.rotation_matrix)

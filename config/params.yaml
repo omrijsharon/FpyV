@@ -22,15 +22,15 @@ simulator:
 
 drone:
   joystick_calib_path: C:\Users\omrijsharon\PycharmProjects\FpyV\config\frsky.json # path to joystick calibration file
-  initial_position: [0, 0, 0] # meters
+  initial_position: [0, 0, 1] # meters
   initial_orientation: [0, 0, 0] # roll pitch yaw in degrees
   initial_velocity: [0, 0, 0] # m/s
   max_rates: 1000 # degrees/s
   mass: 750 # grams
-  drag_coefficient: 0.5
+  drag_coefficient: 0.12
   motors_test_filepath: "config/motors_test_params.csv"
-  rates_transition_rate: 0.02 # smaller value reacts slower [0, 1]
-  thrust_transition_rate: 0.1 # instant power: smaller value reacts slower [0, 1]
+  rates_transition_rate: 0.7 # smaller value reacts slower [0, 1]
+  thrust_transition_rate: 0.3 # instant power: smaller value reacts slower [0, 1]
 
 camera:
   camera_angle: 25.0 #degrees - pitch angle
