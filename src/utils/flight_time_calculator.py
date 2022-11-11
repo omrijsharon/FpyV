@@ -12,6 +12,7 @@ class Battery:
     def __repr__(self):
         return 'Battery(cells={}, capacity={}, mass={})'.format
 
+
 def read_motor_test_report(path):
     '''
     # Tested only with data from T-Motors website
@@ -35,6 +36,18 @@ def read_motor_test_report(path):
     if len(motor_test_report_list[-1]) == 0:
         del motor_test_report_list[-1]
     return motor_test_report_list
+
+
+def model_xy(x, y, degree=3, origin=True):
+    '''
+    :param x: x values
+    :param y: y values
+    :return: polynomial model of y(x)
+    '''
+    if origin:
+        x = np.append(0.0, x)
+        y = np.append(0.0, y)
+    return np.poly1d(np.polyfit(x, y, degree))
 
 
 def model_motor_test_report(motor_test_report, degree=3):
