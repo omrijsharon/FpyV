@@ -1,0 +1,39 @@
+simulator:
+  dt: 0.01 # seconds
+  gravity: 9.81 # m/s^2
+  render_dim: 2 # dimensions
+  ground:
+    size: 30 # meters
+    resolution: 100 # square points in total
+    random: true
+  targets:
+    count: 10 # number of targets
+    center: [0, 0, 0] # meters
+    std: 3.1 # meters
+    size: 0.1 # meters
+    variation: 1 # meters
+    nu: 2 # icosphere resolution
+  track:
+    count: 10 # number of gates in track
+    radius: 12 # meters
+    gate_size: 5 # meters
+    gate_resolution: 17 # points per gate shape
+
+
+drone:
+  joystick_calib_path: C:\Users\omrijsharon\PycharmProjects\FpyV\config\frsky.json # path to joystick calibration file
+  initial_position: [0, 0, 0] # meters
+  initial_orientation: [0, 0, 0] # roll pitch yaw in degrees
+  initial_velocity: [0, 0, 0] # m/s
+  max_rates: 1000 # degrees/s
+  mass: 750 # grams
+  drag_coefficient: 0.5
+  motors_test_filepath: "config/motors_test_params.csv"
+  rates_transition_rate: 0.02 # smaller value reacts slower [0, 1]
+  thrust_transition_rate: 0.1 # instant power: smaller value reacts slower [0, 1]
+
+camera:
+  camera_angle: 25.0 #degrees - pitch angle
+  position_relative_to_frame: [0.1, 0.0, 0.0] #meters
+  fov: 120.0 #degrees
+  resolution: [640, 480] #pixels

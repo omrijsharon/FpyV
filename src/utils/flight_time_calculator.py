@@ -67,6 +67,20 @@ def throttle_and_current_from_thrust(thrust_value_at_hover, motor_test_report, d
     print("At hover, throttle value is {:.2f} % and current consumption is {:.2f} A".format(np.poly1d(np.polyfit(thrust, throttle, degree))(thrust_value_at_hover), 4*np.poly1d(np.polyfit(thrust, current, degree))(thrust_value_at_hover)))
 
 
+def thrust_from_throttle_model(motor_test_report, degree=3):
+    '''
+    :param motor_test_report: dataframe of motor test report
+    :param degree: degree of the polynomial
+    :return: polynomial model of thrust as function of throttle
+    '''
+    thrust = motor_test_report['Thrust'].values
+    throttle = motor_test_report['Throttle'].values
+    # add 0 thrust and 0 throttle to the corresponding arrays
+    thrust = np.append(0.0, thrust)
+    throttle = np.append(0.0, throttle)
+    return np.poly1d(np.polyfit(throttle, thrust, degree))
+
+
 def plot_motor_test_report(motor_test_report, model):
     '''
     :param motor_test_report: dataframe of motor test report

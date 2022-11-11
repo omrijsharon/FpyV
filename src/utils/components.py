@@ -6,14 +6,23 @@ import mpl_toolkits.mplot3d
 import numpy as np
 from icosphere import icosphere
 
-from utils import kinematics, render3d, get_sticks
+from utils import kinematics, render3d, get_sticks, yaml_helper
 from utils.helper_functions import rotation_matrix_from_euler_angles, intrinsic_matrix, WORLD2CAM
 
 
 class Drone:
-    def __init__(self, mass=1.0, drag_coef=0.3, max_rates=200, dt=1e-2):
+    def __init__(self, params):
+        # Joystick
+        self.rc = get_sticks.Joystick()
+        run = self.rc.status
+        if run:
+            print("Joystick connected")
+        else:
+            print("Joystick device was not found")
+        self.rc.calibrate(params["drone"]["joystick_calib_path"], load_calibration_file=True)
+
         self.dim = 3
-        self.action_scale = 200
+        self.max_rates = params["drone"]["joystick_calib_path"]["max_rates"] #deg/s
         self.state = None # [x, y, z, vx, vy, vz] in 3d
         self.rotation_matrix = None # R [3x3] in 3d
         self.acceleration = None
@@ -22,19 +31,18 @@ class Drone:
         self.gravity_force = None
         self.drag_force = None
         self.total_forces = None
-        self.dt = dt
-        self.mass = mass
-        self.drag_coef = drag_coef
+        self.dt = params["simulator"]["dt"]
+        self.mass = params["drone"]["mass"] / 1000 #kg
+        self.drag_coef = params["drone"]["drag_coef"]
         self.thrust_multiplier = 80
-        self.max_rates = max_rates #deg/s
         self.prev_rates = None
         self.prev_thrust = None
-        self.rates_transition_rate = 5e-1
-        self.thrust_transition_rate = 5e-1
-        self.camera = Camera(camera_pitch_angle=25,
-                             position_relative_to_frame=np.array([4 * 2.54 / 100, 0.0, 0.0]),
-                             fov=120,
-                             resolution=(2 * 320, 2 * 240),
+        self.rates_transition_rate = params["drone"]["rates_transition_rate"]
+        self.thrust_transition_rate = params["drone"]["thrust_transition_rate"]
+        self.camera = Camera(camera_pitch_angle=params["camera"]["camera_angle"],
+                             position_relative_to_frame=np.array(params["camera"]["position_relative_to_frame"]),
+                             fov=params["camera"]["fov"],
+                             resolution=params["camera"]["resolution"],
                              focal_length=None
                              )
         self.n_motors = 4
@@ -46,11 +54,11 @@ class Drone:
         self.motors_orientation = None
         self.done = None
 
-    def reset(self, position, velocity, rotation_matrix):
+    def reset(self, position, velocity, ypr):
         self.state = np.zeros(2 * self.dim)
         self.state[:self.dim] = position
         self.state[self.dim:] = velocity
-        self.rotation_matrix = rotation_matrix
+        self.rotation_matrix = rotation_matrix_from_euler_angles(*np.deg2rad(ypr))
         self.acceleration = np.zeros(self.dim)
         self.rates = np.zeros(self.dim)
         self.thrust = np.zeros(self.dim)
@@ -60,7 +68,7 @@ class Drone:
         self.prev_rates = np.zeros(self.dim)
         self.prev_thrust = 0
         self.motors_orientation = self.motors_relative_position @ self.rotation_matrix.T
-        self.camera.reset(drone_position=position, drone_rotation_matrix=rotation_matrix)
+        self.camera.reset(drone_position=position, drone_rotation_matrix=self.rotation_matrix)
         self.done = False
 
     @property
@@ -74,10 +82,10 @@ class Drone:
     def action2force(self, action):
         """
         :param action: [roll_rate/self.action_scale, pitch_rate/self.action_scale, yaw_rate/self.action_scale, throttle]
-                       throttle is expected to be in range [0, 1]
+                       throttle is expected to be in range [-1, 1]
         :return: thrust [3x1], rates [3x1]  in world reference frame
         """
-        self.rates[:self.dim] = np.clip(-action[:self.dim] * self.action_scale, -self.max_rates, self.max_rates)
+        self.rates[:self.dim] = np.clip(-action[:self.dim] * self.max_rates, -self.max_rates, self.max_rates)
         rates = self.rates[:self.dim] * self.rates_transition_rate + \
                 self.prev_rates * (1 - self.rates_transition_rate)
         self.prev_rates = rates
@@ -98,6 +106,9 @@ class Drone:
         :return: rotation_matrix [3x3] (how the world is rotated with respect to the drone), gyro_matrix, accelorometer
                 !!! IRL the drone doesn't know its state: Only IMU measurements and orientation !!!
         """
+        if action is None:
+            throttle, roll, pitch, arm, _, yaw = self.rc.calib_read()
+            action = np.array([-roll, pitch, yaw, throttle])
         self.thrust, self.rates = self.action2force(action)
         self.drag_force = kinematics.calculate_drag(self.state, wind_velocity_vector, self.drag_coef)
         self.gravity_force = kinematics.gravity_vector(self.mass, g=9.81)
@@ -123,7 +134,6 @@ class Drone:
     def velocity_direction_of_target(self, dir2target):
         return
 
-
     def calculate_needed_force_orientation(self, pixel, ref_frame='world', multiplier=1, mode="level", virtual_drag_coef=1.0):
         """
         calculating the force needed to move the drone to a pixel in the image
@@ -147,7 +157,7 @@ class Drone:
         else:
             raise ValueError('Unknown reference frame')
         dir2target = multiplier * self.camera.pixel2direction(pixel, ref_frame=ref_frame)
-        force_vector = dir2target - gravity - virtual_drag * virtual_drag_coef
+        force_vector = dir2target + virtual_drag * virtual_drag_coef - gravity
         # level the drone, keep the y-axis at the horizon
         if mode == "level":
             horizon_vector = np.cross(force_vector, gravity)
@@ -304,19 +314,21 @@ class Camera:
 
 
 class Ground:
-    def __init__(self, size, resolution):
+    def __init__(self, size, resolution, random=False):
         self.size = size
         self.resolution = resolution
-        self.points = self.generate_points()
+        self.points = self.generate_points(random)
 
-    def generate_points(self):
-        random_points = self.size * (2 * np.random.rand(self.resolution**2, 3) - 1)
-        random_points[:, 2] /= self.size
-        random_points[:, 2] *= 0.2
-        return random_points
-        # axis = np.linspace(-self.size/2, self.size/2, self.resolution)
-        # x, y = np.meshgrid(axis, axis)
-        # return np.vstack([x.reshape(-1), y.reshape(-1), np.zeros(x.shape).reshape(-1)]).T
+    def generate_points(self, random):
+        if random:
+            random_points = self.size * (2 * np.random.rand(self.resolution**2, 3) - 1)
+            random_points[:, 2] /= self.size
+            random_points[:, 2] *= 0.2
+            return random_points
+        else:
+            axis = np.linspace(-self.size/2, self.size/2, self.resolution)
+            x, y = np.meshgrid(axis, axis)
+            return np.vstack([x.reshape(-1), y.reshape(-1), np.zeros(x.shape).reshape(-1)]).T
 
     def render(self, ax, **kwargs):
         render3d.plot_3d_points(ax, self.points, color='g', **kwargs)
@@ -394,6 +406,25 @@ class Gate:
         render3d.plot_3d_line(ax, self.corners, color=gate_color)
 
 
+def generate_track(count, radius, gate_size, gate_resolution):
+    theta = np.linspace(0, 2 * np.pi, count + 1)[:-1]
+    gates_positions = np.vstack((np.cos(theta) * gate_size, np.sin(theta) * radius, np.zeros_like(theta))).T
+    gates = []
+    shapes = ["rectangle", "circle", "half_circle"]
+    for i, p in enumerate(gates_positions):
+        rotmat = rotation_matrix_from_euler_angles(0, 0, theta[i] + np.pi / 2)
+        if shapes[i % 3] == "circle":
+            gates.append(Gate(p + np.array([0, 0, gate_size / 2]), rotmat, gate_size / 2, shape=shapes[i % 3], resolution=gate_resolution))
+        else:
+            gates.append(Gate(p, rotmat, gate_resolution, shape=shapes[i % 3], resolution=gate_resolution))
+    return gates
+
+
+def generate_targets(count, center, std, size, variation, nu):
+    return [Target(np.array(center) + std * np.random.randn(3), np.abs(size + variation * np.random.randn()), nu=nu) for _ in range(count)]
+
+
+
 if __name__ == '__main__':
     """#Gates test
     ax, fig = render3d.init_3d_axis()
@@ -410,33 +441,13 @@ if __name__ == '__main__':
     render3d.show_plot(ax, fig, edge=raduis+1)
     plt.render()
     """
-    #transition test
-    rc = get_sticks.Joystick()
-    run = rc.status
-    rc.calibrate(r"C:\Users\omrijsharon\PycharmProjects\FpyV\config\frsky.json", load_calibration_file=True)
-
-    dim = 2
-    n_tragets = 1
-    drone = Drone(drag_coef=0.12, dt=2e-2)
-    targets = [Target(np.array([5, 0, 4]) + 3.1 * np.random.randn(3), 0.5 * np.abs(np.random.randn()), nu=3) for _ in range(n_tragets)]
+    params = yaml_helper.yaml_reader(r"C:\Users\omrijsharon\PycharmProjects\FpyV\config\params.yaml")
+    dim = params["simulator"]["render_dim"]
+    drone = Drone(params)
+    targets = generate_targets(*params["simulator"]["targets"])
+    gates = generate_track(*params["simulator"]["gates"])
     ground = Ground(size=30, resolution=100)
-    drone.reset(position=np.array([0, 0, 1]), velocity=np.array([0, 0, 0]), rotation_matrix=rotation_matrix_from_euler_angles(*np.array([0, 0, 0])))
-
-    gate_raduis = 12
-    n_gates = 20
-    gate_resolution = 51
-    theta = np.linspace(0, 2 * np.pi, n_gates + 1)[:-1]
-    gates_positions = np.vstack((np.cos(theta) * gate_raduis, np.sin(theta) * gate_raduis, np.zeros_like(theta))).T
-    gates = []
-    gate_size = 5
-    shapes = ["rectangle", "circle", "half_circle"]
-    for i, p in enumerate(gates_positions):
-        rotmat = rotation_matrix_from_euler_angles(0, 0, theta[i] + np.pi/2)
-        if shapes[i % 3] == "circle":
-            gates.append(Gate(p + np.array([0, 0, gate_size/2]), rotmat, gate_size/2, shape=shapes[i % 3], resolution=gate_resolution))
-        else:
-            gates.append(Gate(p, rotmat, gate_size, shape=shapes[i % 3], resolution=gate_resolution))
-
+    drone.reset(position=np.array(params["drone"]["initial_position"]), velocity=np.array(params["drone"]["initial_velocity"]), ypr=np.array(params["drone"]["initial_orientation"]))
     timesteps = 10000
     rates_array = np.zeros((timesteps, 3))
     thrust_array = np.zeros((timesteps, 1))
@@ -455,10 +466,10 @@ if __name__ == '__main__':
         ax.clear()
         if i % 1 == 0:
             throttle, roll, pitch, arm, _, yaw = rc.calib_read()
+            action = np.array([-roll, pitch, yaw, throttle])
             # action = np.random.uniform(-1, 1, 4)
             # action[-1] = (action[-1] + 1) / 2
             # action[:-1] *= drone.max_rates/drone.action_scale * 0.4
-            action = np.array([-roll, pitch, yaw, throttle])
             # action = np.array([0.2, 0, 0*sign * 0.6, 0])
         drone.step(action=action, wind_velocity_vector=wind_velocity_vector)
         if drone.done:
