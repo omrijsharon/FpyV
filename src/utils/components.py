@@ -49,7 +49,7 @@ class Drone:
                              resolution=params["camera"]["resolution"],
                              focal_length=None
                              )
-
+        self.trail = Trail(params["drone"]["trail_length"])
         # motors
         self.n_motors = 4
         self.motor_radius = 0.5
@@ -85,6 +85,7 @@ class Drone:
         self.prev_thrust = 0
         self.motors_orientation = self.motors_relative_position @ self.rotation_matrix.T
         self.camera.reset(drone_position=position, drone_rotation_matrix=self.rotation_matrix)
+        self.trail.reset(position)
         self.done = False
 
     @property
@@ -136,6 +137,7 @@ class Drone:
         if np.any(motor_hit_ground):
             # spring force acting on the motor that hit the ground
             force_applied_on_motors = -(((self.position + self.motors_orientation)[:, 2] - self.motor_radius) * motor_hit_ground).sum() * 5e1 * np.array([0, 0, 1])
+            print("Motor hit the ground")
         if np.any((self.position + self.motors_orientation)[:, 2] < 0.0):
             self.done = True
         # Just a test for go-to-pixel algorithm
@@ -145,8 +147,8 @@ class Drone:
         self.total_forces = self.thrust + self.gravity_force + self.drag_force + force_applied_on_motors
         self.acceleration = self.total_forces / self.mass
         self.update()
-
         self.camera.update(self.position, self.rotation_matrix)
+        self.trail.update(self.position)
         angular_velocity_matrix = kinematics.rotation_matrix_from_euler_angles(*self.rates)
         return self.rotation_matrix.T, angular_velocity_matrix, self.rotation_matrix @ self.acceleration
 
@@ -180,7 +182,7 @@ class Drone:
             raise ValueError('Unknown reference frame')
         # dir2target = multiplier * self.camera.pixel2direction(pixel, ref_frame=ref_frame)
         virtual_drag_force = virtual_drag_coef * virtual_drag
-        virtual_lift_force = (self.position[2] < tof_effective_dist) * -(tof_effective_dist - self.position[2]) * virtual_lift_coef * gravity
+        virtual_lift_force = (self.position[2] < tof_effective_dist) * -(tof_effective_dist - self.position[2]) * virtual_lift_coef * gravity * (1 + np.abs(self.velocity[2]))
         force_vector = multiplier * dir2target + virtual_drag_force + virtual_lift_force - gravity
         # level the drone, keep the y-axis at the horizon
         if mode == "level":
@@ -337,6 +339,23 @@ class Camera:
         return self.image
 
 
+class Trail:
+    def __init__(self, trail_length=-1):
+        self.points = None
+        self.trail_length = trail_length
+
+    def reset(self, position):
+        self.points = np.array(position).reshape(1, -1)
+
+    def update(self, position):
+        self.points = np.vstack([self.points, position])
+        if self.trail_length > 0:
+            self.points = self.points[-self.trail_length:]
+
+    def render(self, ax, **kwargs):
+        render3d.plot_3d_line(ax, self.points, **kwargs)
+
+
 class Ground:
     def __init__(self, size, resolution, random=False):
         self.size = size
@@ -475,11 +494,9 @@ if __name__ == '__main__':
     timesteps = 10000
     rates_array = np.zeros((timesteps, 3))
     thrust_array = np.zeros((timesteps, 1))
-    position_array = np.zeros((timesteps, 3))
     wind_velocity_vector = np.array([0, 0, 0])
     rates_array[0, :] = drone.prev_rates
     thrust_array[0, :] = drone.prev_thrust
-    position_array[0, :] = drone.position
 
     # action = np.random.uniform(-1, 1, 4)
     # action[-1] = (action[-1] + 1) / 2
@@ -489,50 +506,42 @@ if __name__ == '__main__':
     for i in range(0, timesteps):
         ax.clear()
         if i % 1 == 0:
-            # throttle, roll, pitch, arm, _, yaw = rc.calib_read()
-            # action = np.array([-roll, pitch, yaw, throttle])
-            # action = np.random.uniform(-1, 1, 4)
-            # action[-1] = (action[-1] + 1) / 2
-            # action[:-1] *= drone.max_rates/drone.action_scale * 0.4
             action = np.array([0.0, 0.3, 0.0, -1.0])
         # drone.step(action=action, wind_velocity_vector=wind_velocity_vector)
         if drone.done:
             print("Crashed")
             break
-        # print((targets[0].points - drone.camera.position).mean(axis=0))
         if dim == 3:
             # render 3d world
             # drone.render(ax, rpy=True, velocity=True, thrust=True, drag=True, gravity=True, total_force=False)
             drone.render(ax, rpy=True, velocity=False, thrust=False, drag=False, gravity=False, total_force=False, motors=True)
             # drone.camera.render(ax)
-            position_array[i, :] = drone.position
-            render3d.plot_3d_line(ax, position_array[:i, :], color="blue", alpha=0.4)
             [target.render(ax, alpha=0.2) for target in targets]
             # ground.render(ax, alpha=0.1)
-            # direction2target = drone.camera.pixel2direction(np.array(np.where(img > 0)).mean(1)[::-1], ref_frame="world")
-            # direction2target = drone.camera.pixel2direction([320, 240], ref_frame="drone")
             target_img = drone.camera.render_depth_image([targets[0]], max_depth=15)
             target_pixels = np.array(np.where(target_img > 0))
             if target_pixels.shape[1] == 0:
                 drone.step(action=action, wind_velocity_vector=wind_velocity_vector, rotation_matrix=None, thrust_force=None)
             else:
                 target_pixels = target_pixels.mean(1)[::-1]
+                target_pixels[0] += 130
                 rot_mat, force_size = drone.calculate_needed_force_orientation(target_pixels, **params["calculate_needed_force_orientation"])
                 drone.step(action=action, wind_velocity_vector=wind_velocity_vector, rotation_matrix=rot_mat, thrust_force=force_size)
                 render3d.plot_3d_rotation_matrix(ax, rot_mat, drone.position, scale=2.5)
             # render3d.plot_3d_arrows(ax, drone.position, direction2target, color='m', alpha=1)
-            render3d.show_plot(ax, fig, middle=drone.position, edge=5)
-            # print(f"position{np.round(drone.position, 2)}")
-        else:
+            if i % 3 == 0:
+                render3d.show_plot(ax, fig, middle=drone.position, edge=5)
+        elif dim == 2:
             # render what the drone camera sees
             # img = 255 * drone.camera.render_image([*targets, *gates, ground]).astype(np.uint8)
-            img = drone.camera.render_depth_image([*targets, *gates, ground], max_depth=25)
+            img = drone.camera.render_depth_image([*targets, *gates, drone.trail, ground], max_depth=25)
             target_img = drone.camera.render_depth_image([targets[0]], max_depth=15)
             target_pixels = np.array(np.where(target_img > 0))
             if target_pixels.shape[1] == 0:
                 drone.step(action=action, wind_velocity_vector=wind_velocity_vector, rotation_matrix=None, thrust_force=None)
             else:
                 target_pixels = target_pixels.mean(1)[::-1]
+                target_pixels[0] += 130
                 rot_mat, force_size = drone.calculate_needed_force_orientation(target_pixels, **params["calculate_needed_force_orientation"])
                 drone.step(action=action, wind_velocity_vector=wind_velocity_vector, rotation_matrix=rot_mat, thrust_force=force_size)
                 # add circle where the target is on the image:
@@ -541,6 +550,8 @@ if __name__ == '__main__':
             cv2.imshow("img", img)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
+        else:
+            raise ValueError("dim can only be 2 or 3")
         # rates_array[i, :] = drone.prev_rates
         # thrust_array[i, :] = drone.prev_thrust
         # plt.subplot(2, 1, 1)

@@ -3,16 +3,16 @@ simulator:
   gravity: 9.81 # m/s^2
   render_dim: 2 # dimensions
   ground:
-    size: 30 # meters
-    resolution: 100 # square points in total
+    size: 60 # meters
+    resolution: 150 # square points in total
     random: true
   targets:
     count: 2 # number of targets
-    center: [10, 0, 1] # meters
+    center: [10, 0, 3] # meters
     std: 0.1 # meters
     size: 1.0 # meters
     variation: 0.1 # meters
-    nu: 2 # icosphere resolution
+    nu: 3 # icosphere resolution
   track:
     count: 0 # number of gates in track
     radius: 12 # meters
@@ -24,7 +24,7 @@ drone:
   joystick_calib_path: C:\Users\omrijsharon\PycharmProjects\FpyV\config\frsky.json # path to joystick calibration file
   motor_test_report_path: C:\Users\omrijsharon\Downloads\2203_5_tmotors.csv # path to motor test report file
   motor_test_report_idx: 0 # index of motor in report file
-  initial_position: [0, 0, 3] # meters
+  initial_position: [0, 0, 0.5] # meters
   initial_orientation: [0, 0, 0] # roll pitch yaw in degrees
   initial_velocity: [1, 0, 0] # m/s
   max_rates: 1000 # degrees/s
@@ -33,9 +33,10 @@ drone:
   motors_test_filepath: "config/motors_test_params.csv"
   rates_transition_rate: 0.7 # smaller value reacts slower [0, 1]
   thrust_transition_rate: 0.5 # instant power: smaller value reacts slower [0, 1]
+  trail_length: 300 # number of points in trail
 
 camera:
-  camera_angle: 45.0 #degrees - pitch angle
+  camera_angle: 40.0 #degrees - pitch angle
   position_relative_to_frame: [0.1, 0.0, 0.0] #meters
   fov: 120.0 #degrees
   resolution: [640, 480] #pixels
@@ -43,7 +44,7 @@ camera:
 
 calculate_needed_force_orientation:
   ref_frame: 'world'
-  multiplier: 10
+  multiplier: 8
   mode: 'level' # 'level' or 'frontarget'
   virtual_drag_coef: 0.5
   virtual_lift_coef: 1.0
