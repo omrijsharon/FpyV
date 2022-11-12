@@ -8,7 +8,7 @@ simulator:
     random: true
   targets:
     count: 2 # number of targets
-    center: [10, 0, 3] # meters
+    center: [10, 0, 0.5] # meters
     std: 0.1 # meters
     size: 1.0 # meters
     variation: 0.1 # meters
@@ -36,7 +36,7 @@ drone:
   trail_length: 300 # number of points in trail
 
 camera:
-  camera_angle: 40.0 #degrees - pitch angle
+  camera_angle: 35.0 #degrees - pitch angle
   position_relative_to_frame: [0.1, 0.0, 0.0] #meters
   fov: 120.0 #degrees
   resolution: [640, 480] #pixels
@@ -44,9 +44,9 @@ camera:
 
 calculate_needed_force_orientation:
   ref_frame: 'world'
-  multiplier: 8
+  multiplier: 4
   mode: 'level' # 'level' or 'frontarget'
   virtual_drag_coef: 0.5
-  virtual_lift_coef: 1.0
+  virtual_lift_coef: 0.1
   tof_effective_dist: 1.3
 

@@ -5,6 +5,30 @@ from utils import render3d, yaml_helper
 from utils.components import Drone, Ground
 from utils.generators import generate_targets, generate_track
 
+params = yaml_helper.yaml_reader(r"C:\Users\omrijsharon\PycharmProjects\FpyV\config\params.yaml")
+half_camera_resolution = np.array(params["camera"]["resolution"]) / 2
+ix,iy, prev_ix, prev_iy = *half_camera_resolution, *half_camera_resolution
+flag = False
+
+# mouse callback function
+def get_target(event,x,y,flags,param):
+    global ix,iy, prev_ix, prev_iy, flag
+    rate = 0.1
+    # if event == cv2.EVENT_MOUSEMOVE:
+    #     ix,iy = x, y
+    #     print(ix, iy)
+    if event == cv2.EVENT_LBUTTONDOWN:
+        flag = True
+    elif event == cv2.EVENT_LBUTTONUP:
+        flag = False
+    if flag:
+        ix,iy = (rate * x) + (1-rate) * prev_ix, (rate * y) + (1-rate) * prev_iy
+        prev_ix, prev_iy = ix, iy
+    else:
+        ix, iy = ((1 - rate) * half_camera_resolution[0]) + rate * prev_ix, ((1 - rate) * half_camera_resolution[1]) + rate * prev_iy
+        prev_ix, prev_iy = ix, iy
+
+
 if __name__ == '__main__':
     """#Gates test
     ax, fig = render3d.init_3d_axis()
@@ -21,7 +45,8 @@ if __name__ == '__main__':
     render3d.show_plot(ax, fig, edge=raduis+1)
     plt.render()
     """
-    params = yaml_helper.yaml_reader(r"C:\Users\omrijsharon\PycharmProjects\FpyV\config\params.yaml")
+    cv2.namedWindow('img')
+    # cv2.setMouseCallback('img', get_target)
     dim = params["simulator"]["render_dim"]
     drone = Drone(params)
     targets = generate_targets(**params["simulator"]["targets"])
@@ -43,7 +68,7 @@ if __name__ == '__main__':
     for i in range(0, timesteps):
         ax.clear()
         if i % 1 == 0:
-            action = np.array([0.0, 0.3, 0.0, -1.0])
+            action = np.array([0.0, 0.0, 0.05, -1.0])
         # drone.step(action=action, wind_velocity_vector=wind_velocity_vector)
         if drone.done:
             print("Crashed")
@@ -75,17 +100,23 @@ if __name__ == '__main__':
             img = drone.camera.render_depth_image([*targets, *gates, drone.trail, ground], max_depth=25)
             target_img = drone.camera.render_depth_image([targets[0]], max_depth=15)
             target_pixels = np.array(np.where(target_img > 0))
+            # target_pixels = np.array([ix, iy])
             if target_pixels.shape[1] == 0:
+            # if target_pixels[0] == -1:
+                print("lost target")
                 drone.step(action=action, wind_velocity_vector=wind_velocity_vector, rotation_matrix=None, thrust_force=None)
             else:
                 target_pixels = target_pixels.mean(1)[::-1]
                 target_pixels[0] += 130
-                rot_mat, force_size = drone.calculate_needed_force_orientation(target_pixels, **params
-                    ["calculate_needed_force_orientation"])
+                # target_pixels = np.array([ix, iy])
+                rot_mat, force_size = drone.calculate_needed_force_orientation(target_pixels, **params["calculate_needed_force_orientation"])
                 drone.step(action=action, wind_velocity_vector=wind_velocity_vector, rotation_matrix=rot_mat, thrust_force=force_size)
                 # add circle where the target is on the image:
-                cv2.circle(img, tuple(target_pixels.astype(int)), 10, (255, 255, 255), 2)
-            img = cv2.putText(img.astype(np.uint8), f"position{np.round(drone.camera.position ,2)}, velocity: {np.round(3.6 * np.linalg.norm(drone.velocity) ,2)} kph", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+                cv2.circle(img, tuple(target_pixels.astype(int)), 10, (255, 255, 255), 1)
+            img = cv2.putText(img.astype(np.uint8), f"position{np.round(drone.camera.position ,2)}, "
+                                                    f"velocity: {np.round(3.6 * np.linalg.norm(drone.velocity) ,2)} kph, "
+                                                    f"throttle: {np.round(100 * (drone.thrust2throttle(force_size) + 1) / 2, 2)} %",
+                              (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
             cv2.imshow("img", img)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
