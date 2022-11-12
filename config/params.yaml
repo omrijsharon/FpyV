@@ -7,12 +7,15 @@ simulator:
     resolution: 150 # square points in total
     random: true
   targets:
-    count: 2 # number of targets
-    center: [10, 0, 0.5] # meters
+    count: 1 # number of targets
+    center: [0, 0, 4] # meters
     std: 0.1 # meters
     size: 1.0 # meters
     variation: 0.1 # meters
     nu: 3 # icosphere resolution
+    path:
+      radius: 5 # meters
+      resolution: 100 # points in total
   track:
     count: 0 # number of gates in track
     radius: 12 # meters
@@ -44,9 +47,9 @@ camera:
 
 calculate_needed_force_orientation:
   ref_frame: 'world'
-  multiplier: 4
+  multiplier: 18
   mode: 'level' # 'level' or 'frontarget'
-  virtual_drag_coef: 0.5
+  virtual_drag_coef: 0.2
   virtual_lift_coef: 0.1
   tof_effective_dist: 1.3
 

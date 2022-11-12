@@ -67,6 +67,7 @@ if __name__ == '__main__':
     sign = 1
     for i in range(0, timesteps):
         ax.clear()
+        [target.update() for target in targets]
         if i % 1 == 0:
             action = np.array([0.0, 0.0, 0.05, -1.0])
         # drone.step(action=action, wind_velocity_vector=wind_velocity_vector)
@@ -107,7 +108,7 @@ if __name__ == '__main__':
                 drone.step(action=action, wind_velocity_vector=wind_velocity_vector, rotation_matrix=None, thrust_force=None)
             else:
                 target_pixels = target_pixels.mean(1)[::-1]
-                target_pixels[0] += 130
+                target_pixels[0] += 0
                 # target_pixels = np.array([ix, iy])
                 rot_mat, force_size = drone.calculate_needed_force_orientation(target_pixels, **params["calculate_needed_force_orientation"])
                 drone.step(action=action, wind_velocity_vector=wind_velocity_vector, rotation_matrix=rot_mat, thrust_force=force_size)

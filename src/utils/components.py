@@ -377,21 +377,37 @@ class Ground:
         render3d.plot_3d_points(ax, self.points, color='g', **kwargs)
 
 
+class CircularPath:
+    def __init__(self, center, radius, resolution):
+        self.path = self.generate_circular_path(center, radius, resolution)
+        self.count = 0
+
+    def generate_circular_path(self, center, radius, resolution):
+        theta = np.linspace(0, 2 * np.pi, resolution + 1)[:-1]
+        return np.vstack((np.cos(theta) * radius, np.sin(theta) * radius, np.zeros_like(theta))).T + np.array(center)
+
+    def __iter__(self):
+        while True:
+            yield self.path[self.count % len(self.path)]
+            self.count += 1
+
+
 class Target:
-    def __init__(self, position, radius, nu):
+    def __init__(self, position, radius, nu, path):
         self.position = position
         self.radius = radius
         self.vertices, self.faces = icosphere(nu=nu)
         self.vertices = self.vertices * radius
         self.current_vertices = self.vertices + self.position
+        self.path = iter(CircularPath(position, **path))
 
     @property
     def points(self):
         return self.current_vertices
 
     #@TODO: add rotation matrix for a rolling ball.
-    def update(self, position):
-        self.position = position
+    def update(self):
+        self.position = next(self.path)
         self.current_vertices = self.vertices + self.position
 
     def render(self, ax, **kwargs):
@@ -447,4 +463,3 @@ class Gate:
         triang = mtri.Triangulation(self.corners[:, 1], self.corners[:, 2])
         ax.plot_trisurf(self.corners[:, 0], self.corners[:, 1], self.corners[:, 2], triangles=triang.triangles, color=fill_color, alpha=alpha)
         render3d.plot_3d_line(ax, self.corners, color=gate_color)
-

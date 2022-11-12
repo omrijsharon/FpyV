@@ -18,5 +18,7 @@ def generate_track(count, radius, gate_size, gate_resolution):
     return gates
 
 
-def generate_targets(count, center, std, size, variation, nu):
-    return [Target(np.array(center) + std * np.random.randn(3), np.abs(size + variation * np.random.randn()), nu=nu) for _ in range(count)]
+def generate_targets(count, center, std, size, variation, nu, path):
+    return [Target(np.array(center) + std * np.random.randn(3), np.abs(size + variation * np.random.randn()), nu, path) for _ in range(count)]
+
+
