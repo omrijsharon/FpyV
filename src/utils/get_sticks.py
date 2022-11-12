@@ -1,5 +1,5 @@
 # https://github.com/Rabbid76/python_windows_joystickapi
-import joystickapi
+from utils import joystickapi
 import numpy as np
 import os
 import json

@@ -1,6 +1,6 @@
 import numpy as np
 
-from src.utils.helper_functions import rotation_matrix_from_euler_angles
+from utils.helper_functions import rotation_matrix_from_euler_angles
 
 
 # from numba import jit
