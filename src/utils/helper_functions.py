@@ -118,5 +118,5 @@ def bbox3d(cls):
     return cls
 
 
-
-
+def distance(obj1, obj2):
+    return np.linalg.norm(obj1.position - obj2.position)

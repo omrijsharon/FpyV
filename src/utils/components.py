@@ -443,6 +443,25 @@ class Cylinder:
                             heights.reshape(-1)]).T
         return points
 
+    def is_collided(self, other):
+        if isinstance(other, Drone):
+            distance = np.linalg.norm(self.position - other.position)
+            return distance < self.radius + other.radius and\
+                   self.position[2] < other.position[2] < self.position[2] + self.height
+        else:
+            raise NotImplementedError
+
+    def generate_grid(self):
+        angles = np.linspace(0, 2 * np.pi, self.angle_resolution)
+        heights = np.linspace(0, self.height, self.height_resolution)
+        angles_grid, heights_grid = np.meshgrid(angles, heights)
+        x_grid = self.radius * np.cos(angles_grid) + self.position[0]
+        y_grid = self.radius * np.sin(angles_grid) + self.position[1]
+        return x_grid, y_grid, heights_grid
+
+    def render(self, ax, **kwargs):
+        ax.plot_surface(*self.generate_grid(), **kwargs)
+
 
 class CircularPath:
     def __init__(self, center, radius, resolution):
@@ -460,13 +479,15 @@ class CircularPath:
 
 @bbox3d
 class Target:
-    def __init__(self, position, radius, nu, path):
+    def __init__(self, position, radius, nu, path=None):
         self.position = position
         self.radius = radius
         self.vertices, self.faces = icosphere(nu=nu)
         self.vertices = self.vertices * radius
         self.current_vertices = self.vertices + self.position
-        self.path = iter(CircularPath(position, **path))
+        self.path = None
+        if path is not None:
+            self.path = iter(CircularPath(position, **path))
 
     @property
     def points(self):
