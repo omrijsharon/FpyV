@@ -52,7 +52,7 @@ if __name__ == '__main__':
     targets = generate_targets(**params["simulator"]["targets"])
     obstacles = generate_cylinders(**params["simulator"]["obstacles"])
     gates = generate_track(**params["simulator"]["track"])
-    ground = Ground(size=30, resolution=100)
+    ground = Ground(**params["simulator"]["ground"])
     drone.reset(position=np.array(params["drone"]["initial_position"]), velocity=np.array(params["drone"]["initial_velocity"]), ypr=np.array(params["drone"]["initial_orientation"]))
     timesteps = 10000
     rates_array = np.zeros((timesteps, 3))
