@@ -8,7 +8,7 @@ from icosphere import icosphere
 
 from utils import kinematics, render3d, get_sticks, yaml_helper
 from utils.flight_time_calculator import read_motor_test_report, model_xy
-from utils.helper_functions import rotation_matrix_from_euler_angles, intrinsic_matrix, WORLD2CAM
+from utils.helper_functions import rotation_matrix_from_euler_angles, intrinsic_matrix, bbox3d, WORLD2CAM
 
 
 class Drone:
@@ -300,9 +300,16 @@ class Camera:
         extrinsic_matrix = np.vstack([self.extrinsic_matrix, np.array([0, 0, 0, 1])])
         return self.intrinsic_matrix @ np.linalg.inv(extrinsic_matrix)[:3, :]
 
-    def project(self, objects_list):
-        points = [obj.points.copy() for obj in objects_list]
-        points = np.vstack(points)
+    def vertices(self, objects_list, attr='bbox3d'):
+        """
+        :param objects_list: list of objects
+        :param type: 'bbox3d' or 'points'
+        :return: vertices of all objects in world frame
+        """
+        return np.vstack([getattr(obj, attr) for obj in objects_list])
+
+    def project(self, objects_list, attr='points'):
+        points = self.vertices(objects_list, attr)
         points = self.projection_matrix @ np.vstack([points.T, np.ones(points.shape[0])])
         points = points.T
         depth = points[:, 2]
@@ -313,8 +320,40 @@ class Camera:
         points = points.astype(int)
         return points, depth
 
+    def bbox3d_to_bbox2d(self, bbox3d_projected_points):
+        """
+        :param bbox3d_projected_points: [8, 3]
+        :return: top_left, bottom_right
+        """
+        return np.min(bbox3d_projected_points, axis=0), np.max(bbox3d_projected_points, axis=0)
+
+    def bbox2d(self, objects_list):
+        bbox2d_list = []
+        for obj in objects_list:
+            points, depth = self.project([obj], attr='bbox3d')
+            min_p, max_p = self.bbox3d_to_bbox2d(points)
+            bbox2d_list.append([min_p, max_p])
+        return bbox2d_list
+
+    def pruned_objects_list(self, objects_list):
+        remove_idx = []
+        for i, obj in enumerate(objects_list):
+            points, depth = self.project([obj], attr='bbox3d')
+            if len(points) == 0:
+                remove_idx.append(i)
+            else:
+                min_p, max_p = self.bbox3d_to_bbox2d(points)
+                if not (np.all(max_p > 0) and np.all(min_p < self.resolution)):
+                    remove_idx.append(i)
+        remove_idx = remove_idx[::-1]
+        # efficient way memory-wise to remove objects
+        for i in remove_idx:
+            del objects_list[i]
+        return objects_list
+
     def render_image(self, objects_list):
-        points, depth = self.project(objects_list)
+        pruned_objects_list = self.pruned_objects_list(objects_list)
+        points, depth = self.project(pruned_objects_list)
         self.image = np.zeros(self.resolution[::-1])
         for z, point in zip(depth, points):
             condition = 0 <= point[0] < self.resolution[0] and \
@@ -325,8 +364,11 @@ class Camera:
         return self.image
 
     def render_depth_image(self, objects_list, max_depth=10):
-        points, depth = self.project(objects_list)
         self.image = np.zeros(self.resolution[::-1])
+        pruned_objects_list = self.pruned_objects_list(objects_list)
+        if len(pruned_objects_list) == 0:
+            return self.image
+        points, depth = self.project(pruned_objects_list, attr='points')
         for z, point in zip(depth, points):
             condition = 0 <= point[0] < self.resolution[0] and\
                         0 <= point[1] < self.resolution[1] and\
@@ -338,7 +380,7 @@ class Camera:
         self.image = (255 * (1 - self.image / max_depth)).astype(np.uint8)
         return self.image
 
-
+@bbox3d
 class Trail:
     def __init__(self, trail_length=-1):
         self.points = None
@@ -355,7 +397,7 @@ class Trail:
     def render(self, ax, **kwargs):
         render3d.plot_3d_line(ax, self.points, **kwargs)
 
-
+@bbox3d
 class Ground:
     def __init__(self, size, resolution, random=False):
         self.size = size
@@ -376,6 +418,31 @@ class Ground:
     def render(self, ax, **kwargs):
         render3d.plot_3d_points(ax, self.points, color='g', **kwargs)
 
+@bbox3d
+class Cylinder:
+    def __init__(self, position, radius, height, angle_resolution, height_resolution, random=False):
+        assert radius > 0, 'radius must be positive'
+        assert height > 0, 'height must be positive'
+        self.position = position
+        self.radius = radius
+        self.height = height
+        self.angle_resolution = angle_resolution
+        self.height_resolution = height_resolution
+        self.points = self.position + self.generate_points(random)
+
+    def generate_points(self, random):
+        if random:
+            angles = np.random.rand(self.height_resolution, self.angle_resolution) * 2 * np.pi
+            heights = np.random.rand(self.height_resolution, self.angle_resolution) * self.height
+        else:
+            angles = np.linspace(0, 2 * np.pi, self.angle_resolution)
+            heights = np.linspace(0, self.height, self.height_resolution)
+            angles, heights = np.meshgrid(angles, heights)
+        points = np.vstack([self.radius * np.cos(angles).reshape(-1),
+                            self.radius * np.sin(angles).reshape(-1),
+                            heights.reshape(-1)]).T
+        return points
+
 
 class CircularPath:
     def __init__(self, center, radius, resolution):
@@ -391,7 +458,7 @@ class CircularPath:
             yield self.path[self.count % len(self.path)]
             self.count += 1
 
-
+@bbox3d
 class Target:
     def __init__(self, position, radius, nu, path):
         self.position = position
@@ -415,7 +482,7 @@ class Target:
         poly = mpl_toolkits.mplot3d.art3d.Poly3DCollection(self.current_vertices[self.faces], **kwargs)
         ax.add_collection3d(poly)
 
-
+@bbox3d
 class Gate:
     def __init__(self, position, rotation_matrix, size, shape="rectangle", resolution=17):
         self.position = position

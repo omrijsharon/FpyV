@@ -97,3 +97,26 @@ def quaternion_to_rotation_matrix(q):
     return np.array([[1 - 2 * qy ** 2 - 2 * qz ** 2, 2 * qx * qy - 2 * qz * qw, 2 * qx * qz + 2 * qy * qw],
                      [2 * qx * qy + 2 * qz * qw, 1 - 2 * qx ** 2 - 2 * qz ** 2, 2 * qy * qz - 2 * qx * qw],
                      [2 * qx * qz - 2 * qy * qw, 2 * qy * qz + 2 * qx * qw, 1 - 2 * qx ** 2 - 2 * qy ** 2]])
+
+
+def bbox3d(cls):
+    @property
+    def bbox3d_(self):
+        """ this function creates a tight bounding box around a 3d object with vectices points """
+        min_points = np.min(self.points, axis=0)
+        max_points = np.max(self.points, axis=0)
+        box = np.zeros((8, 3))
+        box[:4, 0] = min_points[0] # min x
+        box[4:, 0] = max_points[0] # max x
+        box[::2, 1] = min_points[1] # min y
+        box[1::2, 1] = max_points[1] # max y
+        box[[0, 1, 4, 5], 2] = min_points[2] # min z
+        box[[2, 3, 6, 7], 2] = max_points[2] # max z
+        return box
+
+    setattr(cls, 'bbox3d', bbox3d_)
+    return cls
+
+
+
+

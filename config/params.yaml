@@ -1,5 +1,5 @@
 simulator:
-  dt: 0.033 # seconds
+  dt: 0.01 # seconds
   gravity: 9.81 # m/s^2
   render_dim: 2 # dimensions
   ground:
@@ -16,6 +16,17 @@ simulator:
     path:
       radius: 5 # meters
       resolution: 100 # points in total
+  obstacles:
+    count: 30 # number of obstacles
+    center: [0, 0, 0] # meters
+    center_std: [10,10,0] # meters
+    radius: 0.5 # meters
+    radius_std: 0.5 # meters
+    height: 3.0 # meters
+    height_std: 5 # meters
+    angle_resolution: 15 # points in total in a circle
+    height_resolution: 40 # points in total
+    random: false
   track:
     count: 0 # number of gates in track
     radius: 12 # meters

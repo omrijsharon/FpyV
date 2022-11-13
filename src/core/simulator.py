@@ -3,7 +3,7 @@ import numpy as np
 
 from utils import render3d, yaml_helper
 from utils.components import Drone, Ground
-from utils.generators import generate_targets, generate_track
+from utils.generators import generate_targets, generate_track, generate_cylinders
 
 params = yaml_helper.yaml_reader(r"C:\Users\omrijsharon\PycharmProjects\FpyV\config\params.yaml")
 half_camera_resolution = np.array(params["camera"]["resolution"]) / 2
@@ -50,6 +50,7 @@ if __name__ == '__main__':
     dim = params["simulator"]["render_dim"]
     drone = Drone(params)
     targets = generate_targets(**params["simulator"]["targets"])
+    obstacles = generate_cylinders(**params["simulator"]["obstacles"])
     gates = generate_track(**params["simulator"]["track"])
     ground = Ground(size=30, resolution=100)
     drone.reset(position=np.array(params["drone"]["initial_position"]), velocity=np.array(params["drone"]["initial_velocity"]), ypr=np.array(params["drone"]["initial_orientation"]))
@@ -98,7 +99,8 @@ if __name__ == '__main__':
         elif dim == 2:
             # render what the drone camera sees
             # img = 255 * drone.camera.render_image([*targets, *gates, ground]).astype(np.uint8)
-            img = drone.camera.render_depth_image([*targets, *gates, drone.trail, ground], max_depth=25)
+            object_list = [*targets, *gates, *obstacles, drone.trail, ground]
+            img = drone.camera.render_depth_image(object_list, max_depth=25)
             target_img = drone.camera.render_depth_image([targets[0]], max_depth=15)
             target_pixels = np.array(np.where(target_img > 0))
             # target_pixels = np.array([ix, iy])
@@ -111,9 +113,14 @@ if __name__ == '__main__':
                 target_pixels[0] += 0
                 # target_pixels = np.array([ix, iy])
                 rot_mat, force_size = drone.calculate_needed_force_orientation(target_pixels, **params["calculate_needed_force_orientation"])
-                drone.step(action=action, wind_velocity_vector=wind_velocity_vector, rotation_matrix=rot_mat, thrust_force=force_size)
+                # bbox2d_list = drone.camera.bbox2d(drone.camera.pruned_objects_list(object_list))
+                # for bbox2d in bbox2d_list:
+                #     cv2.rectangle(img, tuple(bbox2d[0]), tuple(bbox2d[1]), 255, 1)
+
                 # add circle where the target is on the image:
                 cv2.circle(img, tuple(target_pixels.astype(int)), 10, (255, 255, 255), 1)
+                drone.step(action=action, wind_velocity_vector=wind_velocity_vector, rotation_matrix=rot_mat, thrust_force=force_size)
+
             img = cv2.putText(img.astype(np.uint8), f"position{np.round(drone.camera.position ,2)}, "
                                                     f"velocity: {np.round(3.6 * np.linalg.norm(drone.velocity) ,2)} kph, "
                                                     f"throttle: {np.round(100 * (drone.thrust2throttle(force_size) + 1) / 2, 2)} %",
