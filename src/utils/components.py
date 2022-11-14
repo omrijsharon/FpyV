@@ -115,7 +115,7 @@ class Drone:
         trust = kinematics.thrust_vector(thrust_scalar, self.rotation_matrix)
         return trust, rates
 
-    def handle_collisions(self, object_list, spring_constant=1000, damping_constant=100):
+    def handle_collisions(self, object_list, spring_constant=10000, damping_constant=0):
         collision_forces = np.zeros(shape=(self.n_motors, 3))
         done = False
         msgs = ""
@@ -123,13 +123,15 @@ class Drone:
             if not (isinstance(obj, Gate) or isinstance(obj, Trail)):
                 distances = np.array(list(map(obj.calculate_distance, self.position + self.motors_orientation)))
                 normals = np.array(list(map(obj.calculate_normal, self.position + self.motors_orientation)))
+                if isinstance(obj, Cylinder):
+                    print(distances.min())
                 for i, (distance, normal) in enumerate(zip(distances, normals)):
                     if np.any(distances < 0):
                         done = True
                         msgs += f"Crashed! motor {i} has collided with {obj.__class__.__name__}\n"
                         return collision_forces.sum(axis=0), done, msgs
                     elif distance - self.motor_radius < 0:
-                        collision_forces[i] += kinematics.spring_force(distance - self.motor_radius, normal, self.velocity, spring_constant=1000, damping_constant=0)
+                        collision_forces[i] += kinematics.spring_force(distance - self.motor_radius, normal, self.velocity, spring_constant=spring_constant, damping_constant=damping_constant)
                         msgs += f"Collision with object: motor {i} has collided with {obj.__class__.__name__}\n"
         return collision_forces.sum(axis=0), done, msgs
 
@@ -151,7 +153,7 @@ class Drone:
         self.drag_force = kinematics.calculate_drag(self.state, wind_velocity_vector, self.drag_coef)
         self.gravity_force = kinematics.gravity_vector(self.mass, g=self.gravity)
         self.motors_orientation = self.motors_relative_position @ self.rotation_matrix.T
-        force_applied_on_motors, done, msgs = self.handle_collisions(object_list)
+        force_applied_on_motors, self.done, msgs = self.handle_collisions(object_list)
         if len(msgs) > 0:
             print(msgs)
         if np.any((self.position + self.motors_orientation)[:, 2] < 0.0):
@@ -474,7 +476,6 @@ class Cylinder:
         return points
 
     def calculate_distance(self, point):
-        point = point - self.position
         distance2d = np.linalg.norm(point[:2] - self.position[:2]) - self.radius
         if self.position[2] < point[2] < self.position[2] + self.height:
             return distance2d
