@@ -62,7 +62,7 @@ if __name__ == '__main__':
     rates_array[0, :] = drone.prev_rates
     thrust_array[0, :] = drone.prev_thrust
     prev_frame = np.zeros(shape=params["camera"]["resolution"][::-1])
-    kernel_size = 9
+    kernel_size = 21
     axis = np.linspace(-2, 2, kernel_size)
     X, Y = np.meshgrid(axis, axis)
     kernel = np.exp(-(X ** 2 + Y ** 2) / 0.5)
@@ -77,7 +77,8 @@ if __name__ == '__main__':
     ax, fig = render3d.init_3d_axis()
     sign = 1
     for i in range(0, timesteps):
-        object_list = [*targets, *gates, *obstacles, drone.trail, ground] # increases rendering rate
+        # object_list = [*targets, *gates, *obstacles, drone.trail, ground] # increases rendering rate
+        object_list = [*targets, *gates, *obstacles, ground] # no trail
         ax.clear()
         [target.update() for target in targets]
         if i % 1 == 0:
@@ -115,7 +116,7 @@ if __name__ == '__main__':
             img = params["simulator"]["frame_transition_rate"] * frame + (1 - params["simulator"]["frame_transition_rate"]) * prev_frame
             prev_frame = img.copy()
             img = np.clip(0.8/params["simulator"]["frame_transition_rate"] * img, 0, 255).astype(np.uint8)
-            # img = cv2.dilate(img, kernel, iterations=1)
+            img = cv2.dilate(img, kernel, iterations=1)
             target_img = drone.camera.render_depth_image([targets[0]], max_depth=25)
             target_pixels = np.array(np.where(target_img > 0))
             # target_pixels = np.array([ix, iy])

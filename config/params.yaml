@@ -1,5 +1,5 @@
 simulator:
-  dt: 0.01 # seconds
+  dt: 0.03 # seconds
   gravity: 9.81 # m/s^2
   render_dim: 2 # dimensions
   frame_transition_rate: 0.2
@@ -13,20 +13,20 @@ simulator:
     std: 0.1 # meters
     size: 1.0 # meters
     variation: 0.1 # meters
-    nu: 3 # icosphere resolution
+    nu: 2 # icosphere resolution
     path:
       radius: 10 # meters
       resolution: 200 # points in total
   obstacles:
-    count: 10 # number of obstacles
+    count: 3 # number of obstacles
     center: [0, 0, 0] # meters
     center_std: [10,10,0] # meters
     radius: 2 # meters
     radius_std: 0.5 # meters
-    height: 3.0 # meters
+    height: 10.0 # meters
     height_std: 5 # meters
-    angle_resolution: 8 # points in total in a circle
-    height_resolution: 20 # points in total
+    angle_resolution: 10 # points in total in a circle
+    height_resolution: 50 # points in total
     random: true
   track:
     count: 0 # number of gates in track
