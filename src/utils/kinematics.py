@@ -53,3 +53,9 @@ def thrust_vector(thrust, rotation_matrix):
 
 def total_force(thrust, drag, gravity):
     return thrust + drag + gravity
+
+
+def spring_force(distance, normal, velocity, spring_constant=1000, damping_constant=10):
+    # spring_constant =  [N/m]
+    # damping_constant = [Ns/m]
+    return (-spring_constant * distance - damping_constant * np.dot(velocity, normal)) * normal

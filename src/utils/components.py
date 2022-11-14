@@ -8,7 +8,8 @@ from icosphere import icosphere
 
 from utils import kinematics, render3d, get_sticks, yaml_helper
 from utils.flight_time_calculator import read_motor_test_report, model_xy
-from utils.helper_functions import rotation_matrix_from_euler_angles, intrinsic_matrix, bbox3d, WORLD2CAM
+from utils.helper_functions import rotation_matrix_from_euler_angles, intrinsic_matrix, bbox3d, WORLD2CAM, \
+    generate_circular_path
 
 
 class Drone:
@@ -52,7 +53,7 @@ class Drone:
         self.trail = Trail(params["drone"]["trail_length"])
         # motors
         self.n_motors = 4
-        self.motor_radius = 0.5
+        self.motor_radius = 0.1
         self.radius = 5 * 2.54 / 100
         t = np.linspace(0, 2 * np.pi, self.n_motors + 1)[:-1]
         self.t = t + (t[1] - t[0]) / 2
@@ -114,11 +115,29 @@ class Drone:
         trust = kinematics.thrust_vector(thrust_scalar, self.rotation_matrix)
         return trust, rates
 
+    def handle_collisions(self, object_list, spring_constant=1000, damping_constant=100):
+        collision_forces = np.zeros(shape=(self.n_motors, 3))
+        done = False
+        msgs = ""
+        for obj in object_list:
+            if not (isinstance(obj, Gate) or isinstance(obj, Trail)):
+                distances = np.array(list(map(obj.calculate_distance, self.position + self.motors_orientation)))
+                normals = np.array(list(map(obj.calculate_normal, self.position + self.motors_orientation)))
+                for i, (distance, normal) in enumerate(zip(distances, normals)):
+                    if np.any(distances < 0):
+                        done = True
+                        msgs += f"Crashed! motor {i} has collided with {obj.__class__.__name__}\n"
+                        return collision_forces.sum(axis=0), done, msgs
+                    elif distance - self.motor_radius < 0:
+                        collision_forces[i] += kinematics.spring_force(distance - self.motor_radius, normal, self.velocity, spring_constant=1000, damping_constant=0)
+                        msgs += f"Collision with object: motor {i} has collided with {obj.__class__.__name__}\n"
+        return collision_forces.sum(axis=0), done, msgs
+
     def update(self):
         self.state, self.rotation_matrix = kinematics.update_kinematic_step(self.state, self.rotation_matrix, self.acceleration, self.rates, self.dt)
         self.rotation_matrix = kinematics.rotate_body_by_rates(self.rotation_matrix, self.rates, self.dt)
 
-    def step(self, action, wind_velocity_vector, rotation_matrix, thrust_force):
+    def step(self, action, wind_velocity_vector, object_list, rotation_matrix=None, thrust_force=None):
         """
         :param action: [roll_rate/self.action_scale, pitch_rate/self.action_scale, yaw_rate/self.action_scale, throttle]
         :param wind_velocity_vector: wind vector in world reference frame [3x1]
@@ -132,12 +151,9 @@ class Drone:
         self.drag_force = kinematics.calculate_drag(self.state, wind_velocity_vector, self.drag_coef)
         self.gravity_force = kinematics.gravity_vector(self.mass, g=self.gravity)
         self.motors_orientation = self.motors_relative_position @ self.rotation_matrix.T
-        motor_hit_ground = (self.position + self.motors_orientation)[:, 2] < self.motor_radius
-        force_applied_on_motors = np.zeros(shape=(3,))
-        if np.any(motor_hit_ground):
-            # spring force acting on the motor that hit the ground
-            force_applied_on_motors = -(((self.position + self.motors_orientation)[:, 2] - self.motor_radius) * motor_hit_ground).sum() * 5e1 * np.array([0, 0, 1])
-            print("Motor hit the ground")
+        force_applied_on_motors, done, msgs = self.handle_collisions(object_list)
+        if len(msgs) > 0:
+            print(msgs)
         if np.any((self.position + self.motors_orientation)[:, 2] < 0.0):
             self.done = True
         # Just a test for go-to-pixel algorithm
@@ -154,9 +170,6 @@ class Drone:
 
     def get_gravity_force_in_drone_ref_frame(self):
         return self.rotation_matrix @ kinematics.gravity_vector(self.mass, g=9.81)
-
-    def velocity_direction_of_target(self, dir2target):
-        return
 
     def calculate_needed_force_orientation(self, pixel, ref_frame='world', multiplier=1, mode="level", virtual_drag_coef=1.0, virtual_lift_coef=2e1, tof_effective_dist=1.3):
         """
@@ -336,6 +349,7 @@ class Camera:
         return bbox2d_list
 
     def pruned_objects_list(self, objects_list):
+        objects_list = objects_list.copy()
         remove_idx = []
         for i, obj in enumerate(objects_list):
             points, depth = self.project([obj], attr='bbox3d')
@@ -415,6 +429,22 @@ class Ground:
             x, y = np.meshgrid(axis, axis)
             return np.vstack([x.reshape(-1), y.reshape(-1), np.zeros(x.shape).reshape(-1)]).T
 
+    @property
+    def position(self):
+        return np.array([0, 0, 0])
+
+    def calculate_plane_equation(self):
+        d = -np.dot(self.normal, self.position)
+        return np.append(self.normal, d)
+
+    def calculate_distance(self, point):
+        normal = self.calculate_normal()
+        d = -np.dot(normal, self.position)
+        return np.dot(normal, point) + d
+
+    def calculate_normal(self, point=None):
+        return np.array([0, 0, 1])
+
     def render(self, ax, **kwargs):
         render3d.plot_3d_points(ax, self.points, color='g', **kwargs)
 
@@ -443,13 +473,27 @@ class Cylinder:
                             heights.reshape(-1)]).T
         return points
 
-    def is_collided(self, other):
-        if isinstance(other, Drone):
-            distance = np.linalg.norm(self.position - other.position)
-            return distance < self.radius + other.radius and\
-                   self.position[2] < other.position[2] < self.position[2] + self.height
+    def calculate_distance(self, point):
+        point = point - self.position
+        distance2d = np.linalg.norm(point[:2] - self.position[:2]) - self.radius
+        if self.position[2] < point[2] < self.position[2] + self.height:
+            return distance2d
         else:
-            raise NotImplementedError
+            dh = min(abs(point[2] - self.position[2]), abs(point[2] - (self.position[2] + self.height)))
+            return np.sqrt(distance2d**2 + dh**2)
+
+    def calculate_normal(self, point):
+        point = point - self.position
+        if self.position[2] < point[2] < self.position[2] + self.height:
+            normal = np.array([point[0], point[1], 0])
+            normal /= np.linalg.norm(normal)
+            return normal
+        else:
+            if abs(point[2] - self.position[2]) < abs(point[2] - (self.position[2] + self.height)):
+                normal = np.array([0, 0, -1])
+            else:
+                normal = np.array([0, 0, 1])
+            return normal
 
     def generate_grid(self):
         angles = np.linspace(0, 2 * np.pi, self.angle_resolution)
@@ -465,12 +509,8 @@ class Cylinder:
 
 class CircularPath:
     def __init__(self, center, radius, resolution):
-        self.path = self.generate_circular_path(center, radius, resolution)
+        self.path = generate_circular_path(center, radius, resolution)
         self.count = 0
-
-    def generate_circular_path(self, center, radius, resolution):
-        theta = np.linspace(0, 2 * np.pi, resolution + 1)[:-1]
-        return np.vstack((np.cos(theta) * radius, np.sin(theta) * radius, np.zeros_like(theta))).T + np.array(center)
 
     def __iter__(self):
         while True:
@@ -493,10 +533,15 @@ class Target:
     def points(self):
         return self.current_vertices
 
-    #@TODO: add rotation matrix for a rolling ball.
     def update(self):
         self.position = next(self.path)
         self.current_vertices = self.vertices + self.position
+
+    def calculate_distance(self, point):
+        return np.linalg.norm(point - self.position) - self.radius
+
+    def calculate_normal(self, point):
+        return (point - self.position) / np.linalg.norm(point - self.position)
 
     def render(self, ax, **kwargs):
         """ kwargs: facecolor, edgecolor, linewidth, alpha """
@@ -535,9 +580,8 @@ class Gate:
         return self.rotation_matrix[:, 0]
 
     def calculate_plane_equation(self):
-        normal = self.normal
-        d = -np.dot(normal, self.position)
-        return np.append(normal, d)
+        d = -np.dot(self.normal, self.position)
+        return np.append(self.normal, d)
 
     def calculate_distance(self, point):
         normal = self.normal

@@ -54,6 +54,7 @@ if __name__ == '__main__':
     obstacles = generate_cylinders(**params["simulator"]["obstacles"])
     gates = generate_track(**params["simulator"]["track"])
     ground = Ground(**params["simulator"]["ground"])
+    object_list = [*targets, *gates, *obstacles, drone.trail, ground]
     drone.reset(position=np.array(params["drone"]["initial_position"]), velocity=np.array(params["drone"]["initial_velocity"]), ypr=np.array(params["drone"]["initial_orientation"]))
     timesteps = 10000
     rates_array = np.zeros((timesteps, 3))
@@ -62,7 +63,7 @@ if __name__ == '__main__':
     rates_array[0, :] = drone.prev_rates
     thrust_array[0, :] = drone.prev_thrust
     prev_frame = np.zeros(shape=params["camera"]["resolution"][::-1])
-    kernel_size = 15
+    kernel_size = 9
     axis = np.linspace(-2, 2, kernel_size)
     X, Y = np.meshgrid(axis, axis)
     kernel = np.exp(-(X ** 2 + Y ** 2) / 0.5)
@@ -96,13 +97,13 @@ if __name__ == '__main__':
             target_img = drone.camera.render_depth_image([targets[0]], max_depth=15)
             target_pixels = np.array(np.where(target_img > 0))
             if target_pixels.shape[1] == 0:
-                drone.step(action=action, wind_velocity_vector=wind_velocity_vector, rotation_matrix=None, thrust_force=None)
+                drone.step(action=action, wind_velocity_vector=wind_velocity_vector, object_list=object_list)
             else:
                 target_pixels = target_pixels.mean(1)[::-1]
                 target_pixels[0] += 130
                 rot_mat, force_size = drone.calculate_needed_force_orientation(target_pixels, **params
                     ["calculate_needed_force_orientation"])
-                drone.step(action=action, wind_velocity_vector=wind_velocity_vector, rotation_matrix=rot_mat, thrust_force=force_size)
+                drone.step(action=action, wind_velocity_vector=wind_velocity_vector, object_list=object_list, rotation_matrix=rot_mat, thrust_force=force_size)
                 render3d.plot_3d_rotation_matrix(ax, rot_mat, drone.position, scale=2.5)
             # render3d.plot_3d_arrows(ax, drone.position, direction2target, color='m', alpha=1)
             if i % 3 == 0:
@@ -110,11 +111,10 @@ if __name__ == '__main__':
         elif dim == 2:
             # render what the drone camera sees
             # img = 255 * drone.camera.render_image([*targets, *gates, ground]).astype(np.uint8)
-            object_list = [*targets, *gates, *obstacles, drone.trail, ground]
             frame = drone.camera.render_depth_image(object_list, max_depth=25)
             img = params["simulator"]["frame_transition_rate"] * frame + (1 - params["simulator"]["frame_transition_rate"]) * prev_frame
             prev_frame = img.copy()
-            img = np.clip(0.9/params["simulator"]["frame_transition_rate"] * img, 0, 255).astype(np.uint8)
+            img = np.clip(0.8/params["simulator"]["frame_transition_rate"] * img, 0, 255).astype(np.uint8)
             img = cv2.dilate(img, kernel, iterations=1)
             target_img = drone.camera.render_depth_image([targets[0]], max_depth=25)
             target_pixels = np.array(np.where(target_img > 0))
@@ -122,10 +122,10 @@ if __name__ == '__main__':
             if target_pixels.shape[1] == 0:
             # if target_pixels[0] == -1:
                 print("lost target")
-                drone.step(action=action, wind_velocity_vector=wind_velocity_vector, rotation_matrix=None, thrust_force=None)
+                drone.step(action=action, wind_velocity_vector=wind_velocity_vector, object_list=object_list, rotation_matrix=None, thrust_force=None)
             else:
                 target_pixels = target_pixels.mean(1)[::-1]
-                target_pixels[0] += 0
+                target_pixels[0] += 130
                 # target_pixels = np.array([ix, iy])
                 rot_mat, force_size = drone.calculate_needed_force_orientation(target_pixels, **params["calculate_needed_force_orientation"])
                 prune_object_list = drone.camera.pruned_objects_list(object_list)
@@ -135,7 +135,7 @@ if __name__ == '__main__':
 
                 # add circle where the target is on the image:
                 cv2.circle(img, tuple(target_pixels.astype(int)), 10, (255, 255, 255), 1)
-                drone.step(action=action, wind_velocity_vector=wind_velocity_vector, rotation_matrix=rot_mat, thrust_force=force_size)
+                drone.step(action=action, wind_velocity_vector=wind_velocity_vector, object_list=object_list, rotation_matrix=rot_mat, thrust_force=force_size)
 
                 img = cv2.putText(img.astype(np.uint8), f"dist2target: {np.round(distance(drone, targets[0]), 2)} m, "
                                                         f"velocity: {np.round(3.6 * np.linalg.norm(drone.velocity) ,2)} kph, "

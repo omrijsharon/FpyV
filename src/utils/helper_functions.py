@@ -120,3 +120,16 @@ def bbox3d(cls):
 
 def distance(obj1, obj2):
     return np.linalg.norm(obj1.position - obj2.position)
+
+def point_to_surface_distance(point, surface):
+    """
+    :param point: point in 3d space
+    :param surface: surface in 3d space
+    :return: distance from point to surface
+    """
+    return np.abs(np.dot(point, surface[:3]) + surface[3]) / np.linalg.norm(surface[:3])
+
+
+def generate_circular_path(center, radius, resolution):
+    theta = np.linspace(0, 2 * np.pi, resolution + 1)[:-1]
+    return np.vstack((np.cos(theta) * radius, np.sin(theta) * radius, np.zeros_like(theta))).T + np.array(center)
