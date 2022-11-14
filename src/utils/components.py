@@ -123,8 +123,6 @@ class Drone:
             if not (isinstance(obj, Gate) or isinstance(obj, Trail)):
                 distances = np.array(list(map(obj.calculate_distance, self.position + self.motors_orientation)))
                 normals = np.array(list(map(obj.calculate_normal, self.position + self.motors_orientation)))
-                if isinstance(obj, Cylinder):
-                    print(distances.min())
                 for i, (distance, normal) in enumerate(zip(distances, normals)):
                     if np.any(distances < 0):
                         done = True
@@ -351,7 +349,7 @@ class Camera:
         return bbox2d_list
 
     def pruned_objects_list(self, objects_list):
-        objects_list = objects_list.copy()
+        # objects_list = objects_list.copy() #slows the sim down!!!
         remove_idx = []
         for i, obj in enumerate(objects_list):
             points, depth = self.project([obj], attr='bbox3d')

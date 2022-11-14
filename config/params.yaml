@@ -5,7 +5,7 @@ simulator:
   frame_transition_rate: 0.2
   ground:
     size: 60 # meters
-    resolution: 150 # square points in total
+    resolution: 100 # square points in total
     random: true
   targets:
     count: 1 # number of targets
@@ -18,15 +18,15 @@ simulator:
       radius: 10 # meters
       resolution: 200 # points in total
   obstacles:
-    count: 30 # number of obstacles
+    count: 10 # number of obstacles
     center: [0, 0, 0] # meters
     center_std: [10,10,0] # meters
-    radius: 0.5 # meters
+    radius: 2 # meters
     radius_std: 0.5 # meters
     height: 3.0 # meters
     height_std: 5 # meters
-    angle_resolution: 15 # points in total in a circle
-    height_resolution: 40 # points in total
+    angle_resolution: 8 # points in total in a circle
+    height_resolution: 20 # points in total
     random: true
   track:
     count: 0 # number of gates in track
@@ -51,7 +51,7 @@ drone:
   trail_length: 300 # number of points in trail
 
 camera:
-  camera_angle: 75.0 #degrees - pitch angle
+  camera_angle: 25.0 #degrees - pitch angle
   position_relative_to_frame: [0.1, 0.0, 0.0] #meters
   fov: 120.0 #degrees
   resolution: [640, 480] #pixels
@@ -59,7 +59,7 @@ camera:
 
 calculate_needed_force_orientation:
   ref_frame: 'world'
-  multiplier: 19
+  multiplier: 4
   mode: 'level' # 'level' or 'frontarget'
   virtual_drag_coef: 0.5
   virtual_lift_coef: 1.0

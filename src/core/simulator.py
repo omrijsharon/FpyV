@@ -54,7 +54,6 @@ if __name__ == '__main__':
     obstacles = generate_cylinders(**params["simulator"]["obstacles"])
     gates = generate_track(**params["simulator"]["track"])
     ground = Ground(**params["simulator"]["ground"])
-    object_list = [*targets, *gates, *obstacles, drone.trail, ground]
     drone.reset(position=np.array(params["drone"]["initial_position"]), velocity=np.array(params["drone"]["initial_velocity"]), ypr=np.array(params["drone"]["initial_orientation"]))
     timesteps = 10000
     rates_array = np.zeros((timesteps, 3))
@@ -78,6 +77,7 @@ if __name__ == '__main__':
     ax, fig = render3d.init_3d_axis()
     sign = 1
     for i in range(0, timesteps):
+        object_list = [*targets, *gates, *obstacles, drone.trail, ground] # increases rendering rate
         ax.clear()
         [target.update() for target in targets]
         if i % 1 == 0:
@@ -115,7 +115,7 @@ if __name__ == '__main__':
             img = params["simulator"]["frame_transition_rate"] * frame + (1 - params["simulator"]["frame_transition_rate"]) * prev_frame
             prev_frame = img.copy()
             img = np.clip(0.8/params["simulator"]["frame_transition_rate"] * img, 0, 255).astype(np.uint8)
-            img = cv2.dilate(img, kernel, iterations=1)
+            # img = cv2.dilate(img, kernel, iterations=1)
             target_img = drone.camera.render_depth_image([targets[0]], max_depth=25)
             target_pixels = np.array(np.where(target_img > 0))
             # target_pixels = np.array([ix, iy])
@@ -142,7 +142,8 @@ if __name__ == '__main__':
                                                         f"throttle: {np.round(100 * (drone.thrust2throttle(force_size) + 1) / 2, 2)} %, " 
                                                         f"position{np.round(drone.camera.position ,2)}",
                                   (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
-            cv2.imshow("img", img)
+            if i % 2 == 0:
+                cv2.imshow("img", img)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
         else:
