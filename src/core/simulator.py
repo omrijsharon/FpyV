@@ -51,6 +51,7 @@ if __name__ == '__main__':
     dim = params["simulator"]["render_dim"]
     drone = Drone(params)
     targets = generate_targets(**params["simulator"]["targets"])
+    target_chase_idx = 0
     obstacles = generate_cylinders(**params["simulator"]["obstacles"])
     gates = generate_track(**params["simulator"]["track"])
     ground = Ground(**params["simulator"]["ground"])
@@ -62,7 +63,7 @@ if __name__ == '__main__':
     rates_array[0, :] = drone.prev_rates
     thrust_array[0, :] = drone.prev_thrust
     prev_frame = np.zeros(shape=params["camera"]["resolution"][::-1])
-    kernel_size = 21
+    kernel_size = 11
     axis = np.linspace(-2, 2, kernel_size)
     X, Y = np.meshgrid(axis, axis)
     kernel = np.exp(-(X ** 2 + Y ** 2) / 0.5)
@@ -95,15 +96,14 @@ if __name__ == '__main__':
             [target.render(ax, alpha=0.2) for target in targets]
             [obstacle.render(ax, alpha=0.2) for obstacle in obstacles]
             # ground.render(ax, alpha=0.1)
-            target_img = drone.camera.render_depth_image([targets[0]], max_depth=15)
+            target_img = drone.camera.render_depth_image([targets[target_chase_idx]], max_depth=15)
             target_pixels = np.array(np.where(target_img > 0))
             if target_pixels.shape[1] == 0:
                 drone.step(action=action, wind_velocity_vector=wind_velocity_vector, object_list=object_list)
             else:
                 target_pixels = target_pixels.mean(1)[::-1]
                 target_pixels[0] += 130
-                rot_mat, force_size = drone.calculate_needed_force_orientation(target_pixels, **params
-                    ["calculate_needed_force_orientation"])
+                rot_mat, force_size = drone.calculate_needed_force_orientation(target_pixels, targets[target_chase_idx], **params["calculate_needed_force_orientation"])
                 drone.step(action=action, wind_velocity_vector=wind_velocity_vector, object_list=object_list, rotation_matrix=rot_mat, thrust_force=force_size)
                 render3d.plot_3d_rotation_matrix(ax, rot_mat, drone.position, scale=2.5)
             # render3d.plot_3d_arrows(ax, drone.position, direction2target, color='m', alpha=1)
@@ -117,7 +117,7 @@ if __name__ == '__main__':
             prev_frame = img.copy()
             img = np.clip(0.8/params["simulator"]["frame_transition_rate"] * img, 0, 255).astype(np.uint8)
             img = cv2.dilate(img, kernel, iterations=1)
-            target_img = drone.camera.render_depth_image([targets[0]], max_depth=25)
+            target_img = drone.camera.render_depth_image([targets[target_chase_idx]], max_depth=25)
             target_pixels = np.array(np.where(target_img > 0))
             # target_pixels = np.array([ix, iy])
             if target_pixels.shape[1] == 0:
@@ -126,9 +126,9 @@ if __name__ == '__main__':
                 drone.step(action=action, wind_velocity_vector=wind_velocity_vector, object_list=object_list, rotation_matrix=None, thrust_force=None)
             else:
                 target_pixels = target_pixels.mean(1)[::-1]
-                target_pixels[0] += 130
+                target_pixels[0] += 0
                 # target_pixels = np.array([ix, iy])
-                rot_mat, force_size = drone.calculate_needed_force_orientation(target_pixels, **params["calculate_needed_force_orientation"])
+                rot_mat, force_size = drone.calculate_needed_force_orientation(target_pixels, targets[target_chase_idx], **params["calculate_needed_force_orientation"])
                 prune_object_list = drone.camera.pruned_objects_list(object_list)
                 # bbox2d_list = drone.camera.bbox2d(drone.camera.pruned_objects_list(prune_object_list))
                 # for bbox2d in bbox2d_list:

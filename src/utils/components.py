@@ -12,6 +12,34 @@ from utils.helper_functions import rotation_matrix_from_euler_angles, intrinsic_
     generate_circular_path
 
 
+class PID:
+    def __init__(self, kP, kI, kD, dt, integral_clip=1, output_clip=np.inf):
+        self.kP = kP
+        self.kI = kI
+        self.kD = kD
+        self.dt = dt
+        self.integral_clip = integral_clip
+        self.output_clip = output_clip
+        self.error = 0
+        self.integral = 0
+        self.derivative = 0
+        self.previous_error = 0
+
+    def reset(self):
+        self.error = 0
+        self.integral = 0
+        self.derivative = 0
+        self.previous_error = 0
+
+    def __call__(self, current, target):
+        self.error = current - target
+        self.integral = np.clip(self.integral + self.error * self.dt, -self.integral_clip, self.integral_clip)
+        self.derivative = (self.error - self.previous_error) / self.dt
+        self.previous_error = self.error
+        return np.clip(self.kP * self.error + self.kI * self.integral + self.kD * self.derivative, 0.3, self.output_clip)
+
+
+
 class Drone:
     def __init__(self, params):
         # Joystick
@@ -51,6 +79,9 @@ class Drone:
                              focal_length=None
                              )
         self.trail = Trail(params["drone"]["trail_length"])
+        self.force_multiplier = PID(**params["drone"]["force_multiplier_pid"], dt=params["simulator"]["dt"])
+        self.keep_distance = params["drone"]["keep_distance"]
+        self.UWB_sensor_max_range = params["drone"]["UWB_sensor_max_range"]
         # motors
         self.n_motors = 4
         self.motor_radius = 0.1
@@ -87,6 +118,7 @@ class Drone:
         self.motors_orientation = self.motors_relative_position @ self.rotation_matrix.T
         self.camera.reset(drone_position=position, drone_rotation_matrix=self.rotation_matrix)
         self.trail.reset(position)
+        self.force_multiplier.reset()
         self.done = False
 
     @property
@@ -171,12 +203,12 @@ class Drone:
     def get_gravity_force_in_drone_ref_frame(self):
         return self.rotation_matrix @ kinematics.gravity_vector(self.mass, g=9.81)
 
-    def calculate_needed_force_orientation(self, pixel, ref_frame='world', multiplier=1, mode="level", virtual_drag_coef=1.0, virtual_lift_coef=2e1, tof_effective_dist=1.3):
+    def calculate_needed_force_orientation(self, pixel, target, ref_frame='world', mode="level", virtual_drag_coef=1.0, virtual_lift_coef=2e1, tof_effective_dist=1.3):
         """
         calculating the force needed to move the drone to a pixel in the image
         :param pixel: [x, y] pixel coordinates
+        :param target: target to follow
         :param ref_frame: 'world' or 'drone'
-        :param multiplier: how much force to apply to the direction of the target
         :param mode: 'level' or 'frontarget' where the drone is leveled or facing the target
         :param virtual_drag_coef: virtual drag coefficient
         :return: force vector [3x1] in world reference frame
@@ -196,7 +228,12 @@ class Drone:
         # dir2target = multiplier * self.camera.pixel2direction(pixel, ref_frame=ref_frame)
         virtual_drag_force = virtual_drag_coef * virtual_drag
         virtual_lift_force = (self.position[2] < tof_effective_dist) * -(tof_effective_dist - self.position[2]) * virtual_lift_coef * gravity * (1 + np.abs(self.velocity[2]))
+        measured_dist2target = min(target.calculate_distance(self.position), self.UWB_sensor_max_range)
+        multiplier = self.force_multiplier(measured_dist2target, self.keep_distance)
         force_vector = multiplier * dir2target + virtual_drag_force + virtual_lift_force - gravity
+        force_vector_norm = np.linalg.norm(force_vector)
+        if force_vector @ self.rotation_matrix[:, 2] < 0:
+            force_vector_norm = 0
         # level the drone, keep the y-axis at the horizon
         if mode == "level":
             horizon_vector = np.cross(force_vector, gravity)
@@ -208,7 +245,8 @@ class Drone:
             raise ValueError('Unknown mode')
         rotation_to_apply_force = np.stack([front_vector, horizon_vector, force_vector], axis=1)
         rotation_to_apply_force = rotation_to_apply_force / np.linalg.norm(rotation_to_apply_force, axis=0)
-        return rotation_to_apply_force, np.linalg.norm(force_vector)
+        print(f"Multiplier: {multiplier}, force vector: {force_vector_norm}")
+        return rotation_to_apply_force, force_vector_norm
 
     def render(self, ax, rpy=True, velocity=False, thrust=False, drag=False, gravity=False, total_force=True, motors=True):
         render3d.plot_3d_points(ax, self.position, color='k')

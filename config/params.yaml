@@ -9,16 +9,16 @@ simulator:
     random: true
   targets:
     count: 1 # number of targets
-    center: [0, 0, 0.5] # meters
+    center: [0, 0, 2] # meters
     std: 0.1 # meters
     size: 1.0 # meters
     variation: 0.1 # meters
     nu: 2 # icosphere resolution
     path:
       radius: 10 # meters
-      resolution: 200 # points in total
+      resolution: 300 # points in total
   obstacles:
-    count: 3 # number of obstacles
+    count: 1 # number of obstacles
     center: [0, 0, 0] # meters
     center_std: [10,10,0] # meters
     radius: 2 # meters
@@ -42,6 +42,7 @@ drone:
   initial_position: [0, 0, 5] # meters
   initial_orientation: [0, 0, 0] # roll pitch yaw in degrees
   initial_velocity: [1, 0, 0] # m/s
+  multiplier_pid: [ 10, 0.2 , 1 ] # proportional, integral, derivative
   max_rates: 1000 # degrees/s
   mass: 250 # grams
   drag_coefficient: 0.12
@@ -49,9 +50,17 @@ drone:
   rates_transition_rate: 0.7 # smaller value reacts slower [0, 1]
   thrust_transition_rate: 0.5 # instant power: smaller value reacts slower [0, 1]
   trail_length: 300 # number of points in trail
+  keep_distance: 2 # meters
+  UWB_sensor_max_range: 10 # meters
+  force_multiplier_pid:
+    kP: 25
+    kI: 1
+    kD: 5
+    integral_clip: 10
+    output_clip: 20
 
 camera:
-  camera_angle: 25.0 #degrees - pitch angle
+  camera_angle: 20.0 #degrees - pitch angle
   position_relative_to_frame: [0.1, 0.0, 0.0] #meters
   fov: 120.0 #degrees
   resolution: [640, 480] #pixels
@@ -59,9 +68,8 @@ camera:
 
 calculate_needed_force_orientation:
   ref_frame: 'world'
-  multiplier: 4
   mode: 'level' # 'level' or 'frontarget'
   virtual_drag_coef: 0.5
-  virtual_lift_coef: 1.0
+  virtual_lift_coef: 0.2
   tof_effective_dist: 1.3
 
