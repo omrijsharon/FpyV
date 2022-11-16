@@ -13,30 +13,34 @@ from utils.helper_functions import rotation_matrix_from_euler_angles, intrinsic_
 
 
 class PID:
-    def __init__(self, kP, kI, kD, dt, integral_clip=1, output_clip=np.inf):
+    def __init__(self, kP, kI, kD, dt, integral_clip=1, min_output=0.3, max_output=1):
         self.kP = kP
         self.kI = kI
         self.kD = kD
         self.dt = dt
         self.integral_clip = integral_clip
-        self.output_clip = output_clip
+        self.min_output = min_output
+        self.max_output = max_output
         self.error = 0
         self.integral = 0
         self.derivative = 0
         self.previous_error = 0
+        self.is_first = True
 
     def reset(self):
         self.error = 0
         self.integral = 0
         self.derivative = 0
         self.previous_error = 0
+        self.is_first = True
 
     def __call__(self, current, target):
         self.error = current - target
         self.integral = np.clip(self.integral + self.error * self.dt, -self.integral_clip, self.integral_clip)
-        self.derivative = (self.error - self.previous_error) / self.dt
+        self.derivative = (1-self.is_first) * (self.error - self.previous_error) / self.dt
+        self.is_first = False
         self.previous_error = self.error
-        return np.clip(self.kP * self.error + self.kI * self.integral + self.kD * self.derivative, 0.3, self.output_clip)
+        return np.clip(self.kP * self.error + self.kI * self.integral + self.kD * self.derivative, self.min_output, self.max_output)
 
 
 
@@ -230,10 +234,12 @@ class Drone:
         virtual_lift_force = (self.position[2] < tof_effective_dist) * -(tof_effective_dist - self.position[2]) * virtual_lift_coef * gravity * (1 + np.abs(self.velocity[2]))
         measured_dist2target = min(target.calculate_distance(self.position), self.UWB_sensor_max_range)
         multiplier = self.force_multiplier(measured_dist2target, self.keep_distance)
-        force_vector = multiplier * dir2target + virtual_drag_force + virtual_lift_force - gravity
-        force_vector_norm = np.linalg.norm(force_vector)
-        if force_vector @ self.rotation_matrix[:, 2] < 0:
+        if multiplier==self.force_multiplier.min_output:
+            force_vector = virtual_drag_force + virtual_lift_force - gravity
             force_vector_norm = 0
+        else:
+            force_vector = multiplier * dir2target + virtual_drag_force + virtual_lift_force - gravity
+            force_vector_norm = np.linalg.norm(force_vector)
         # level the drone, keep the y-axis at the horizon
         if mode == "level":
             horizon_vector = np.cross(force_vector, gravity)
@@ -245,7 +251,6 @@ class Drone:
             raise ValueError('Unknown mode')
         rotation_to_apply_force = np.stack([front_vector, horizon_vector, force_vector], axis=1)
         rotation_to_apply_force = rotation_to_apply_force / np.linalg.norm(rotation_to_apply_force, axis=0)
-        print(f"Multiplier: {multiplier}, force vector: {force_vector_norm}")
         return rotation_to_apply_force, force_vector_norm
 
     def render(self, ax, rpy=True, velocity=False, thrust=False, drag=False, gravity=False, total_force=True, motors=True):

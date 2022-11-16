@@ -15,7 +15,7 @@ simulator:
     variation: 0.1 # meters
     nu: 2 # icosphere resolution
     path:
-      radius: 10 # meters
+      radius: 20 # meters
       resolution: 300 # points in total
   obstacles:
     count: 1 # number of obstacles
@@ -50,17 +50,18 @@ drone:
   rates_transition_rate: 0.7 # smaller value reacts slower [0, 1]
   thrust_transition_rate: 0.5 # instant power: smaller value reacts slower [0, 1]
   trail_length: 300 # number of points in trail
-  keep_distance: 2 # meters
-  UWB_sensor_max_range: 10 # meters
+  keep_distance: 8 # meters
+  UWB_sensor_max_range: 12 # meters
   force_multiplier_pid:
-    kP: 25
-    kI: 1
-    kD: 5
-    integral_clip: 10
-    output_clip: 20
+    kP: 1
+    kI: 2
+    kD: 0.1
+    integral_clip: 10.0
+    min_output: 0.0
+    max_output: 40
 
 camera:
-  camera_angle: 20.0 #degrees - pitch angle
+  camera_angle: 35.0 #degrees - pitch angle
   position_relative_to_frame: [0.1, 0.0, 0.0] #meters
   fov: 120.0 #degrees
   resolution: [640, 480] #pixels
