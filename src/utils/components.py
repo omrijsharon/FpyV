@@ -13,7 +13,7 @@ from utils.helper_functions import rotation_matrix_from_euler_angles, intrinsic_
 
 
 class PID:
-    def __init__(self, kP, kI, kD, dt, integral_clip=1, min_output=0.3, max_output=1):
+    def __init__(self, kP, kI, kD, dt, integral_clip=1, min_output=0.3, max_output=1, derivative_transition_rate=0.5):
         self.kP = kP
         self.kI = kI
         self.kD = kD
@@ -21,9 +21,14 @@ class PID:
         self.integral_clip = integral_clip
         self.min_output = min_output
         self.max_output = max_output
+        self.error_list = np.array([])
+        self.integral_list = np.array([])
+        self.derivative_list = np.array([])
         self.error = 0
         self.integral = 0
         self.derivative = 0
+        self.prev_derivative = 0
+        self.derivative_transition_rate = derivative_transition_rate
         self.previous_error = 0
         self.is_first = True
 
@@ -31,17 +36,37 @@ class PID:
         self.error = 0
         self.integral = 0
         self.derivative = 0
+        self.prev_derivative = 0
         self.previous_error = 0
         self.is_first = True
 
     def __call__(self, current, target):
         self.error = current - target
-        self.integral = np.clip(self.integral + self.error * self.dt, -self.integral_clip, self.integral_clip)
-        self.derivative = (1-self.is_first) * (self.error - self.previous_error) / self.dt
+        self.error_list = np.append(self.error_list, self.error)
+        self.integral = np.clip(0.99*self.integral + self.error * self.dt, -self.integral_clip, self.integral_clip)
+        self.integral_list = np.append(self.integral_list, self.integral)
+        self.derivative = np.clip((1-self.is_first) * (self.error - self.previous_error) / self.dt, -1, 1)
+        self.derivative = (1-self.derivative_transition_rate) * self.prev_derivative + self.derivative_transition_rate * self.derivative # replacing feedforward with low pass filter
+        self.prev_derivative = self.derivative
+        self.derivative_list = np.append(self.derivative_list, self.derivative)
         self.is_first = False
         self.previous_error = self.error
         return np.clip(self.kP * self.error + self.kI * self.integral + self.kD * self.derivative, self.min_output, self.max_output)
 
+    def plot(self):
+        plt.clf()
+        plt.subplot(131)
+        plt.plot(self.error_list, label='error')
+        plt.plot(self.derivative_list, label='derivative', alpha=0.5)
+        plt.title('Error: {:.2f}'.format(self.error))
+        plt.subplot(132)
+        plt.plot(self.integral_list, label='integral')
+        plt.title('Integral')
+        plt.subplot(133)
+        plt.plot(self.derivative_list, label='derivative')
+        plt.title('Derivative')
+        # plt.legend()
+        plt.pause(0.001)
 
 
 class Drone:
@@ -83,7 +108,7 @@ class Drone:
                              focal_length=None
                              )
         self.trail = Trail(params["drone"]["trail_length"])
-        self.force_multiplier = PID(**params["drone"]["force_multiplier_pid"], dt=params["simulator"]["dt"])
+        self.force_multiplier_pid = PID(**params["drone"]["force_multiplier_pid"], dt=params["simulator"]["dt"])
         self.keep_distance = params["drone"]["keep_distance"]
         self.UWB_sensor_max_range = params["drone"]["UWB_sensor_max_range"]
         # motors
@@ -122,7 +147,7 @@ class Drone:
         self.motors_orientation = self.motors_relative_position @ self.rotation_matrix.T
         self.camera.reset(drone_position=position, drone_rotation_matrix=self.rotation_matrix)
         self.trail.reset(position)
-        self.force_multiplier.reset()
+        self.force_multiplier_pid.reset()
         self.done = False
 
     @property
@@ -233,8 +258,8 @@ class Drone:
         virtual_drag_force = virtual_drag_coef * virtual_drag
         virtual_lift_force = (self.position[2] < tof_effective_dist) * -(tof_effective_dist - self.position[2]) * virtual_lift_coef * gravity * (1 + np.abs(self.velocity[2]))
         measured_dist2target = min(target.calculate_distance(self.position), self.UWB_sensor_max_range)
-        multiplier = self.force_multiplier(measured_dist2target, self.keep_distance)
-        if multiplier==self.force_multiplier.min_output:
+        multiplier = self.force_multiplier_pid(measured_dist2target, self.keep_distance)
+        if multiplier==self.force_multiplier_pid.min_output:
             force_vector = virtual_drag_force + virtual_lift_force - gravity
             force_vector_norm = 0
         else:

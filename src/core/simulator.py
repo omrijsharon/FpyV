@@ -144,6 +144,7 @@ if __name__ == '__main__':
                                                         f"position{np.round(drone.camera.position ,2)}",
                                   (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
             if i % 2 == 0:
+                drone.force_multiplier_pid.plot()
                 cv2.imshow("img", img)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
