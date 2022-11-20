@@ -9,14 +9,14 @@ simulator:
     random: true
   targets:
     count: 1 # number of targets
-    center: [0, 0, 2] # meters
+    center: [0, 0, 1] # meters
     std: 0.1 # meters
     size: 1.0 # meters
     variation: 0.1 # meters
     nu: 2 # icosphere resolution
     path:
-      radius: 25 # meters
-      resolution: 800 # points in total
+      radius: 15 # meters
+      resolution: 2500 # points in total
   obstacles:
     count: 1 # number of obstacles
     center: [0, 0, 0] # meters
@@ -50,7 +50,7 @@ drone:
   rates_transition_rate: 0.7 # smaller value reacts slower [0, 1]
   thrust_transition_rate: 0.5 # instant power: smaller value reacts slower [0, 1]
   trail_length: 300 # number of points in trail
-  keep_distance: 5 # meters
+  keep_distance: 8 # meters
   UWB_sensor_max_range: 12 # meters
   force_multiplier_pid:
     kP: 1.0

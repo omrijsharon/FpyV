@@ -126,7 +126,7 @@ if __name__ == '__main__':
                 drone.step(action=action, wind_velocity_vector=wind_velocity_vector, object_list=object_list, rotation_matrix=None, thrust_force=None)
             else:
                 target_pixels = target_pixels.mean(1)[::-1]
-                target_pixels[0] += 0
+                target_pixels[0] += 70
                 # target_pixels = np.array([ix, iy])
                 rot_mat, force_size = drone.calculate_needed_force_orientation(target_pixels, targets[target_chase_idx], **params["calculate_needed_force_orientation"])
                 prune_object_list = drone.camera.pruned_objects_list(object_list)
@@ -144,7 +144,7 @@ if __name__ == '__main__':
                                                         f"position{np.round(drone.camera.position ,2)}",
                                   (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
             if i % 2 == 0:
-                drone.force_multiplier_pid.plot()
+                # drone.force_multiplier_pid.plot()
                 cv2.imshow("img", img)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
