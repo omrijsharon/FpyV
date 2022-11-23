@@ -36,7 +36,7 @@ simulator:
 
 
 drone:
-  joystick_calib_path: C:\Users\omrijsharon\PycharmProjects\FpyV\config\frsky.json # path to joystick calibration file
+  joystick_calib_path: C:\Users\omri_\PycharmProjects\FpyV\config\frsky.json # path to joystick calibration file
   motor_test_report_path: C:\Users\omrijsharon\Downloads\2203_5_tmotors.csv # path to motor test report file
   motor_test_report_idx: 0 # index of motor in report file
   initial_position: [0, 0, 5] # meters

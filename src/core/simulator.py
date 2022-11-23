@@ -6,10 +6,11 @@ from utils.components import Drone, Ground
 from utils.generators import generate_targets, generate_track, generate_cylinders
 from utils.helper_functions import distance
 
-params = yaml_helper.yaml_reader(r"C:\Users\omrijsharon\PycharmProjects\FpyV\config\params.yaml")
+params = yaml_helper.yaml_reader(r"C:\Users\omri_\PycharmProjects\FpyV\config\params.yaml")
 half_camera_resolution = np.array(params["camera"]["resolution"]) / 2
 ix,iy, prev_ix, prev_iy = *half_camera_resolution, *half_camera_resolution
 flag = False
+
 
 # mouse callback function
 def get_target(event,x,y,flags,param):
