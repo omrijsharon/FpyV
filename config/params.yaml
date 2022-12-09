@@ -37,7 +37,7 @@ simulator:
 
 drone:
   joystick_calib_path: C:\Users\omri_\PycharmProjects\FpyV\config\frsky.json # path to joystick calibration file
-  motor_test_report_path: C:\Users\omrijsharon\Downloads\2203_5_tmotors.csv # path to motor test report file
+  motor_test_report_path: C:\Users\omri_\PycharmProjects\FpyV\config\t_motos_f80_motor_test.csv # path to motor test report file
   motor_test_report_idx: 0 # index of motor in report file
   initial_position: [0, 0, 5] # meters
   initial_orientation: [0, 0, 0] # roll pitch yaw in degrees
@@ -51,27 +51,27 @@ drone:
   thrust_transition_rate: 0.5 # instant power: smaller value reacts slower [0, 1]
   trail_length: 300 # number of points in trail
   keep_distance: 8 # meters
-  UWB_sensor_max_range: 12 # meters
+  UWB_sensor_max_range: 13 # meters
   force_multiplier_pid:
-    kP: 1.0
+    kP: 0.1
     kI: 1.0
-    kD: 2.0
+    kD: 5.0
     integral_clip: 10.0
     min_output: 0.0
-    max_output: 40
+    max_output: 20
     derivative_transition_rate: 0.1 # Replacing Feedforward. Smaller value reacts slower but smoother [0, 1]
 
 camera:
-  camera_angle: 35.0 #degrees - pitch angle
+  camera_angle: 25.0 #degrees - pitch angle
   position_relative_to_frame: [0.1, 0.0, 0.0] #meters
   fov: 120.0 #degrees
   resolution: [640, 480] #pixels
 
 
-calculate_needed_force_orientation:
+point_and_shoot:
   ref_frame: 'world'
   mode: 'level' # 'level' or 'frontarget'
-  virtual_drag_coef: 0.5
-  virtual_lift_coef: 0.2
-  tof_effective_dist: 1.3
+  virtual_drag_coefficient: 0.5
+  virtual_lift_coefficient: 0.2
+  tof_effective_distance: 1.3
 

@@ -109,6 +109,9 @@ class Drone:
                              )
         self.trail = Trail(params["drone"]["trail_length"])
         self.force_multiplier_pid = PID(**params["drone"]["force_multiplier_pid"], dt=params["simulator"]["dt"])
+        self.virtual_drag_coef = params["point_and_shoot"]["virtual_drag_coefficient"]
+        self.virtual_lift_coef = params["point_and_shoot"]["virtual_lift_coefficient"]
+        self.tof_effective_dist = params["point_and_shoot"]["tof_effective_distance"]
         self.keep_distance = params["drone"]["keep_distance"]
         self.UWB_sensor_max_range = params["drone"]["UWB_sensor_max_range"]
         # motors
@@ -128,7 +131,7 @@ class Drone:
         # thrust is measured for a single motor in grams. We need to convert it to Newtons and multiply by the number of motors.
         thrust = self.n_motors * self.motor_test_report['Thrust'].values / 1000 * self.gravity # N
         throttle = self.motor_test_report['Throttle'].values
-        self.throttle2thrust = lambda x: model_xy(throttle, thrust)(100 * (x + 1) / 2)
+        self.throttle2thrust = lambda x: model_xy(throttle, thrust)(100 * (x + 1) / 2) # x is in [-1, 1]
         self.thrust2throttle = lambda x: np.clip((model_xy(thrust, throttle)(x) / 100) * 2 - 1, -1, 1)
 
     def reset(self, position, velocity, ypr):
@@ -232,7 +235,7 @@ class Drone:
     def get_gravity_force_in_drone_ref_frame(self):
         return self.rotation_matrix @ kinematics.gravity_vector(self.mass, g=9.81)
 
-    def calculate_needed_force_orientation(self, pixel, target, ref_frame='world', mode="level", virtual_drag_coef=1.0, virtual_lift_coef=2e1, tof_effective_dist=1.3):
+    def calculate_needed_force_orientation(self, pixel, target, ref_frame='world', mode="level"):
         """
         calculating the force needed to move the drone to a pixel in the image
         :param pixel: [x, y] pixel coordinates
@@ -240,7 +243,7 @@ class Drone:
         :param ref_frame: 'world' or 'drone'
         :param mode: 'level' or 'frontarget' where the drone is leveled or facing the target
         :param virtual_drag_coef: virtual drag coefficient
-        :return: force vector [3x1] in world reference frame
+        :return: rotation_matrix [3x3] (how the drone needs to be oriented), thrust_force
         """
         dir2target = self.camera.pixel2direction(pixel)
         # virtual drag is applied more and more when the velocity is in the opposite direction of the target
@@ -255,8 +258,13 @@ class Drone:
         else:
             raise ValueError('Unknown reference frame')
         # dir2target = multiplier * self.camera.pixel2direction(pixel, ref_frame=ref_frame)
-        virtual_drag_force = virtual_drag_coef * virtual_drag
-        virtual_lift_force = (self.position[2] < tof_effective_dist) * -(tof_effective_dist - self.position[2]) * virtual_lift_coef * gravity * (1 + np.abs(self.velocity[2]))
+        """ (velocity_direction_of_target - 1) / 2
+        virtual_drag coef is cosine between current velocity and target direction [-1, 1]
+        since we only want we only want the drag force to be applied when the drone is moving in the opposite direction of the target
+        we map the virtual_drag coef to [-1, 0] where -1 means the drone is moving in the opposite direction of the target and 0 means the drone is moving in the same direction of the target
+        """
+        virtual_drag_force = self.virtual_drag_coef * virtual_drag
+        virtual_lift_force = (self.position[2] < self.tof_effective_dist) * -(self.tof_effective_dist - self.position[2]) * self.virtual_lift_coef * gravity * (1 + np.abs(self.velocity[2]))
         measured_dist2target = min(target.calculate_distance(self.position), self.UWB_sensor_max_range)
         multiplier = self.force_multiplier_pid(measured_dist2target, self.keep_distance)
         if multiplier==self.force_multiplier_pid.min_output:
@@ -277,6 +285,94 @@ class Drone:
         rotation_to_apply_force = np.stack([front_vector, horizon_vector, force_vector], axis=1)
         rotation_to_apply_force = rotation_to_apply_force / np.linalg.norm(rotation_to_apply_force, axis=0)
         return rotation_to_apply_force, force_vector_norm
+
+    def point_and_shoot(self, pixel, throttle, ref_frame='world', mode="level"):
+        """
+        calculating the force needed to move the drone to a pixel in the image
+        :param pixel: [x, y] pixel coordinates
+        :param target: target to follow
+        :param ref_frame: 'world' or 'drone'
+        :param mode: 'level' or 'frontarget' where the drone is leveled or facing the target
+        :return: force vector [3x1] in world reference frame
+        """
+        dir2target = self.camera.pixel2direction(pixel)
+        # virtual drag is applied more and more when the velocity is in the opposite direction of the target
+        if ref_frame == 'world':
+            gravity = kinematics.gravity_vector(self.mass, g=9.81)
+            velocity_direction_of_target = self.velocity / np.linalg.norm(self.velocity) @ dir2target
+            virtual_drag = -(velocity_direction_of_target - 1) / 2 * -self.velocity * np.linalg.norm(self.velocity)
+        elif ref_frame == 'drone':
+            gravity = self.get_gravity_force_in_drone_ref_frame()
+            velocity_direction_of_target = self.rotation_matrix @ self.velocity / np.linalg.norm(self.velocity) @ dir2target
+            virtual_drag = -(velocity_direction_of_target - 1) / 2 * -self.rotation_matrix @ self.velocity * np.linalg.norm(self.velocity)
+        else:
+            raise ValueError('Unknown reference frame')
+        virtual_drag_force = self.virtual_drag_coef * virtual_drag
+        virtual_lift_force = (self.position[2] < self.tof_effective_dist) * -(self.tof_effective_dist - self.position[2]) * self.virtual_lift_coef * gravity * (1 + np.abs(self.velocity[2]))
+        multiplier = self.throttle2thrust(throttle)
+        if multiplier == self.force_multiplier_pid.min_output:
+            force_vector = virtual_drag_force + virtual_lift_force - gravity
+            force_vector_norm = 0
+        else:
+            force_vector = multiplier * dir2target + virtual_drag_force + virtual_lift_force - gravity
+            force_vector_norm = np.linalg.norm(force_vector)
+        # level the drone, keep the y-axis at the horizon
+        if mode == "level":
+            horizon_vector = np.cross(force_vector, gravity)
+            front_vector = np.cross(horizon_vector, force_vector)
+        elif mode == "frontarget":
+            horizon_vector = np.cross(force_vector, dir2target)
+            front_vector = np.cross(horizon_vector, force_vector)
+        else:
+            raise ValueError('Unknown mode')
+        rotation_to_apply_force = np.stack([front_vector, horizon_vector, force_vector], axis=1)
+        rotation_to_apply_force = rotation_to_apply_force / np.linalg.norm(rotation_to_apply_force, axis=0)
+        return rotation_to_apply_force, force_vector_norm
+
+    def point_and_shoot_optimizer(self, pixel, ref_frame='world', mode="level"):
+        """
+        calculating the force needed to move the drone to a pixel in the image
+        :param pixel: [x, y] pixel coordinates
+        :param target: target to follow
+        :param ref_frame: 'world' or 'drone'
+        :param mode: 'level' or 'frontarget' where the drone is leveled or facing the target
+        :return: force vector [3x1] in world reference frame
+        """
+        def projection_matrix(rotation_matrix):
+            extrinsic_matrix = self.camera.extrinsic_matrix
+            extrinsic_matrix[:3, :3] = rotation_matrix
+            return self.camera.intrinsic_matrix @ np.linalg.inv(extrinsic_matrix)[:3, :]
+
+        current_rotation_matrix = self.camera.rotation_matrix @ self.rotation_matrix
+        # create a 3d point in the direction of the pixel, 100m away
+        point3d = 100 * self.camera.pixel2direction(pixel, ref_frame='drone_rotation_matrix', drone_rotation_matrix=current_rotation_matrix)
+        current_pixel = self.camera.project_points(point3d, projection_matrix(current_rotation_matrix))
+        stop: bool = False
+        throttle: float = 0.0
+
+        while not stop:
+            new_drone_rotation_matrix, force_vector_norm = self.point_and_shoot(current_pixel, throttle, ref_frame=ref_frame, mode=mode)
+            new_rotation_matrix = self.camera.rotation_matrix @ new_drone_rotation_matrix
+            next_pixel = self.camera.project_points(point3d, projection_matrix(new_rotation_matrix))
+            # checks:
+            # 1. if throttle is too high -> lower init throttle
+            # 2. if throttle is too low -> increase init throttle
+            # 3. if target is in front of the drone
+            # 4. if target is within x frame boundaries:
+            #   4.1 if target is under the frame -> increase throttle
+            #   4.2 if target is above the frame -> decrease throttle
+            # 5. if target is within y frame boundaries -  can it happen?!?
+            if self.thrust2throttle(force_vector_norm) < -1:
+                pass
+            elif self.thrust2throttle(force_vector_norm) > 1:
+                pass
+            if len(pixel) > 0:
+                stop = True
+            else:
+                throttle += 0.1
+
+
+
 
     def render(self, ax, rpy=True, velocity=False, thrust=False, drag=False, gravity=False, total_force=True, motors=True):
         render3d.plot_3d_points(ax, self.position, color='k')
@@ -352,11 +448,11 @@ class Camera:
         self.position = drone_position + drone_rotation_matrix @ self.relative_position
         self.rotation_matrix = drone_rotation_matrix @ self.relative_rotation_matrix
 
-    def pixel2direction(self, pixel, ref_frame='world'):
+    def pixel2direction(self, pixel, ref_frame='world', drone_rotation_matrix=None):
         """
         calculating a vector norm 1 pointing from camera/drone to the pixel
         :param pixel: [h, w]
-        :param ref_frame: 'world', 'drone' or 'camera'
+        :param ref_frame: 'world', 'drone', 'camera' or 'drone_rotation_matrix'
         :return: direction vector in world frame
         """
         pixel = np.array(pixel)
@@ -367,6 +463,9 @@ class Camera:
             direction = self.relative_rotation_matrix @ np.linalg.inv(self.intrinsic_matrix) @ pixel
         elif ref_frame == 'camera':
             direction = np.linalg.inv(self.intrinsic_matrix) @ pixel
+        elif ref_frame == 'drone_rotation_matrix' and drone_rotation_matrix is not None:
+            rotation_matrix = drone_rotation_matrix @ self.relative_rotation_matrix
+            direction = rotation_matrix @ np.linalg.inv(self.intrinsic_matrix) @ pixel
         else:
             raise ValueError('ref_frame must be world, drone or camera')
         return direction / np.linalg.norm(direction)
@@ -388,6 +487,19 @@ class Camera:
         :return: vertices of all objects in world frame
         """
         return np.vstack([getattr(obj, attr) for obj in objects_list])
+
+    def project_points(self, points, projection_matrix):
+        """
+        :param points: 3d points in world frame, shape (N, 3)
+        """
+        points = projection_matrix @ np.vstack([points.T, np.ones(points.shape[0])])
+        points = points.T
+        depth = points[:, 2]
+        #keep only points in front of camera
+        points = points[depth > 0]
+        points = points[:, :2] / depth.reshape(-1, 1)
+        points = points.astype(int)
+        return points
 
     def project(self, objects_list, attr='points'):
         points = self.vertices(objects_list, attr)

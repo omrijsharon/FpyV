@@ -57,9 +57,9 @@ if __name__ == '__main__':
     gates = generate_track(**params["simulator"]["track"])
     ground = Ground(**params["simulator"]["ground"])
     drone.reset(position=np.array(params["drone"]["initial_position"]), velocity=np.array(params["drone"]["initial_velocity"]), ypr=np.array(params["drone"]["initial_orientation"]))
-    timesteps = 10000
-    rates_array = np.zeros((timesteps, 3))
-    thrust_array = np.zeros((timesteps, 1))
+    time_steps = 10000
+    rates_array = np.zeros((time_steps, 3))
+    thrust_array = np.zeros((time_steps, 1))
     wind_velocity_vector = np.array([0, 0, 0])
     rates_array[0, :] = drone.prev_rates
     thrust_array[0, :] = drone.prev_thrust
@@ -78,7 +78,7 @@ if __name__ == '__main__':
     # action[:-1] *= drone.max_rates / drone.action_scale
     ax, fig = render3d.init_3d_axis()
     sign = 1
-    for i in range(0, timesteps):
+    for i in range(0, time_steps):
         # object_list = [*targets, *gates, *obstacles, drone.trail, ground] # increases rendering rate
         object_list = [*targets, *gates, *obstacles, ground] # no trail
         ax.clear()
@@ -129,7 +129,8 @@ if __name__ == '__main__':
                 target_pixels = target_pixels.mean(1)[::-1]
                 target_pixels[0] += 70
                 # target_pixels = np.array([ix, iy])
-                rot_mat, force_size = drone.calculate_needed_force_orientation(target_pixels, targets[target_chase_idx], **params["calculate_needed_force_orientation"])
+                # rot_mat, force_size = drone.calculate_needed_force_orientation(target_pixels, targets[target_chase_idx])
+                rot_mat, force_size = drone.point_and_shoot(target_pixels, throttle=0.0)
                 prune_object_list = drone.camera.pruned_objects_list(object_list)
                 # bbox2d_list = drone.camera.bbox2d(drone.camera.pruned_objects_list(prune_object_list))
                 # for bbox2d in bbox2d_list:
@@ -137,7 +138,7 @@ if __name__ == '__main__':
 
                 # add circle where the target is on the image:
                 cv2.circle(img, tuple(target_pixels.astype(int)), 10, (255, 255, 255), 1)
-                drone.step(action=action, wind_velocity_vector=wind_velocity_vector, object_list=object_list, rotation_matrix=rot_mat, thrust_force=force_size)
+                drone.step(action=action, wind_velocity_vector=wind_velocity_vector, object_list=object_list, rotation_matrix=rot_mat, thrust_force=force_size*0)
 
                 img = cv2.putText(img.astype(np.uint8), f"dist2target: {np.round(distance(drone, targets[0]), 2)} m, "
                                                         f"velocity: {np.round(3.6 * np.linalg.norm(drone.velocity) ,2)} kph, "
@@ -145,7 +146,7 @@ if __name__ == '__main__':
                                                         f"position{np.round(drone.camera.position ,2)}",
                                   (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
             if i % 2 == 0:
-                # drone.force_multiplier_pid.plot()
+                drone.force_multiplier_pid.plot()
                 cv2.imshow("img", img)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break

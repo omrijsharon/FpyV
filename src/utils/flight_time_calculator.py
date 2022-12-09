@@ -23,16 +23,18 @@ def read_motor_test_report(path):
     motor_test_report = pd.read_csv(path, header=None, index_col=False)
     # add headers to the dataframe
     motor_test_report.columns = ['Type', 'Propeller', 'Throttle', 'Thrust', 'Voltage', 'Current', 'RPM', 'Power', 'Efficiency', 'Temperture']
+    if motor_test_report.iloc[0][0] == "Type":
+        motor_test_report = motor_test_report.iloc[1:]
     # convert the 'Thrust' column to float
     motor_test_report['Throttle'] = motor_test_report['Throttle'].str.replace('%', '').astype(float)
-
+    motor_test_report['Thrust'] = motor_test_report['Thrust'].str.replace(',', '.').astype(float)
     motor_test_report['Power'] = motor_test_report['Power'].str.replace(',', '.').astype(float)
     # find in which row 'thrust' is 100%
     motor_test_report_list = []
-    idx = np.append(-1, np.append(motor_test_report[motor_test_report['Throttle'] == 100].index.values, len(motor_test_report)))
+    idx = np.append(0, np.append(motor_test_report[motor_test_report['Throttle'] == 100].index.values, len(motor_test_report)))
     # slice the dataframe where 'thrust' is 100%
     for b, n in zip(idx[:-1], idx[1:]):
-        motor_test_report_list.append(motor_test_report[b+1:n+1])
+        motor_test_report_list.append(motor_test_report[b:n])
     if len(motor_test_report_list[-1]) == 0:
         del motor_test_report_list[-1]
     return motor_test_report_list
