@@ -133,6 +133,7 @@ class Drone:
         throttle = self.motor_test_report['Throttle'].values
         self.throttle2thrust = lambda x: model_xy(throttle, thrust)(100 * (x + 1) / 2) # x is in [-1, 1]
         self.thrust2throttle = lambda x: np.clip((model_xy(thrust, throttle)(x) / 100) * 2 - 1, -1, 1)
+        self.max_throttle_in_force = self.throttle2thrust(1)
 
     def reset(self, position, velocity, ypr):
         self.state = np.zeros(2 * self.dim)
@@ -286,11 +287,11 @@ class Drone:
         rotation_to_apply_force = rotation_to_apply_force / np.linalg.norm(rotation_to_apply_force, axis=0)
         return rotation_to_apply_force, force_vector_norm
 
-    def point_and_shoot(self, pixel, throttle, ref_frame='world', mode="level"):
+    def point_and_shoot(self, pixel, multiplier, ref_frame='world', mode="level"):
         """
         calculating the force needed to move the drone to a pixel in the image
         :param pixel: [x, y] pixel coordinates
-        :param target: target to follow
+        :param multiplier: force multiplier.
         :param ref_frame: 'world' or 'drone'
         :param mode: 'level' or 'frontarget' where the drone is leveled or facing the target
         :return: force vector [3x1] in world reference frame
@@ -309,13 +310,17 @@ class Drone:
             raise ValueError('Unknown reference frame')
         virtual_drag_force = self.virtual_drag_coef * virtual_drag
         virtual_lift_force = (self.position[2] < self.tof_effective_dist) * -(self.tof_effective_dist - self.position[2]) * self.virtual_lift_coef * gravity * (1 + np.abs(self.velocity[2]))
-        multiplier = self.throttle2thrust(throttle)
-        if multiplier == self.force_multiplier_pid.min_output:
-            force_vector = virtual_drag_force + virtual_lift_force - gravity
-            force_vector_norm = 0
-        else:
+        critiria = 0.9999
+        while critiria < 1:
+            multiplier = np.clip(multiplier * critiria, self.force_multiplier_pid.min_output, self.force_multiplier_pid.max_output)
             force_vector = multiplier * dir2target + virtual_drag_force + virtual_lift_force - gravity
             force_vector_norm = np.linalg.norm(force_vector)
+            critiria = self.max_throttle_in_force / force_vector_norm # if critiria < 1, the force is too big and we need to reduce the throttle by amount of critiria
+            print("i am here stuck in a loop, critiria = ", critiria)
+
+
+        throttle = self.thrust2throttle(force_vector_norm)
+        multiplier = self.throttle2thrust(throttle)
         # level the drone, keep the y-axis at the horizon
         if mode == "level":
             horizon_vector = np.cross(force_vector, gravity)

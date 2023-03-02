@@ -13,10 +13,10 @@ simulator:
     std: 0.1 # meters
     size: 1.0 # meters
     variation: 0.1 # meters
-    nu: 2 # icosphere resolution
+    nu: 7 # icosphere resolution
     path:
       radius: 15 # meters
-      resolution: 2500 # points in total
+      resolution: 3500 # points in total
   obstacles:
     count: 1 # number of obstacles
     center: [0, 0, 0] # meters
@@ -42,23 +42,23 @@ drone:
   initial_position: [0, 0, 5] # meters
   initial_orientation: [0, 0, 0] # roll pitch yaw in degrees
   initial_velocity: [1, 0, 0] # m/s
-  multiplier_pid: [ 10, 0.2 , 1 ] # proportional, integral, derivative
+  multiplier_pid: [ 20, 0.2 , 1 ] # proportional, integral, derivative
   max_rates: 1000 # degrees/s
   mass: 250 # grams
-  drag_coefficient: 0.12
+  drag_coefficient: 0.2
   motors_test_filepath: "config/motors_test_params.csv"
   rates_transition_rate: 0.7 # smaller value reacts slower [0, 1]
   thrust_transition_rate: 0.5 # instant power: smaller value reacts slower [0, 1]
-  trail_length: 300 # number of points in trail
+  trail_length: 0 # number of points in trail
   keep_distance: 8 # meters
   UWB_sensor_max_range: 13 # meters
   force_multiplier_pid:
-    kP: 0.1
+    kP: 1.0
     kI: 1.0
     kD: 5.0
     integral_clip: 10.0
-    min_output: 0.0
-    max_output: 20
+    min_output: 1.0
+    max_output: 90
     derivative_transition_rate: 0.1 # Replacing Feedforward. Smaller value reacts slower but smoother [0, 1]
 
 camera:
@@ -71,7 +71,7 @@ camera:
 point_and_shoot:
   ref_frame: 'world'
   mode: 'level' # 'level' or 'frontarget'
-  virtual_drag_coefficient: 0.5
-  virtual_lift_coefficient: 0.2
-  tof_effective_distance: 1.3
+  virtual_drag_coefficient: 0.0
+  virtual_lift_coefficient: 0.7
+  tof_effective_distance: 1.0 # meters
 
