@@ -180,7 +180,7 @@ class Drone:
         trust = kinematics.thrust_vector(thrust_scalar, self.rotation_matrix)
         return trust, rates
 
-    def handle_collisions(self, object_list, spring_constant=10000, damping_constant=0):
+    def handle_collisions(self, object_list, spring_constant=100, damping_constant=0):
         collision_forces = np.zeros(shape=(self.n_motors, 3))
         done = False
         msgs = ""
@@ -268,17 +268,14 @@ class Drone:
         virtual_lift_force = (self.position[2] < self.tof_effective_dist) * -(self.tof_effective_dist - self.position[2]) * self.virtual_lift_coef * gravity * (1 + np.abs(self.velocity[2]))
         measured_dist2target = min(target.calculate_distance(self.position), self.UWB_sensor_max_range)
         multiplier = self.force_multiplier_pid(measured_dist2target, self.keep_distance)
-        if multiplier==self.force_multiplier_pid.min_output:
-            force_vector = virtual_drag_force + virtual_lift_force - gravity
-            force_vector_norm = 0
-        else:
-            force_vector = multiplier * dir2target + virtual_drag_force + virtual_lift_force - gravity
-            force_vector_norm = np.linalg.norm(force_vector)
-        # level the drone, keep the y-axis at the horizon
-        if mode == "level":
+        print("self.force_multiplier_pid.error: ", self.force_multiplier_pid.error, "multiplier: ", multiplier)
+        multiplier = np.clip(multiplier, self.force_multiplier_pid.min_output, self.force_multiplier_pid.max_output)
+        force_vector = multiplier * dir2target + virtual_drag_force + virtual_lift_force - gravity
+        force_vector_norm = np.linalg.norm(force_vector)
+        if mode == "level": # level the drone, keep the y-axis at the horizon
             horizon_vector = np.cross(force_vector, gravity)
             front_vector = np.cross(horizon_vector, force_vector)
-        elif mode == "frontarget":
+        elif mode == "frontarget": # keep the y-axis perpendicular to drone-target vector so the drone is facing the target.
             horizon_vector = np.cross(force_vector, dir2target)
             front_vector = np.cross(horizon_vector, force_vector)
         else:
@@ -309,15 +306,18 @@ class Drone:
         else:
             raise ValueError('Unknown reference frame')
         virtual_drag_force = self.virtual_drag_coef * virtual_drag
-        virtual_lift_force = (self.position[2] < self.tof_effective_dist) * -(self.tof_effective_dist - self.position[2]) * self.virtual_lift_coef * gravity * (1 + np.abs(self.velocity[2]))
+        virtual_lift_force = (self.position[2] < self.tof_effective_dist) * -(self.tof_effective_dist - self.position[2]) * self.virtual_lift_coef * gravity * -(np.clip(self.velocity[2], a_min=-np.inf, a_max=0))
         critiria = 0.9999
+        counter = 0
         while critiria < 1:
             multiplier = np.clip(multiplier * critiria, self.force_multiplier_pid.min_output, self.force_multiplier_pid.max_output)
             force_vector = multiplier * dir2target + virtual_drag_force + virtual_lift_force - gravity
             force_vector_norm = np.linalg.norm(force_vector)
             critiria = self.max_throttle_in_force / force_vector_norm # if critiria < 1, the force is too big and we need to reduce the throttle by amount of critiria
-            print("i am here stuck in a loop, critiria = ", critiria)
-
+            counter += 1
+            if counter == 2:
+                print("i am here stuck in a loop, critiria = ", critiria, "counter = ", counter, "force_vector_norm = ", force_vector_norm)
+                print("virtual_drag_force = ", virtual_drag_force, "virtual_lift_force = ", virtual_lift_force, "gravity = ", gravity)
 
         throttle = self.thrust2throttle(force_vector_norm)
         multiplier = self.throttle2thrust(throttle)

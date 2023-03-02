@@ -133,10 +133,11 @@ if __name__ == '__main__':
                 drone.step(action=action, wind_velocity_vector=wind_velocity_vector, object_list=object_list, rotation_matrix=None, thrust_force=None)
             else:
                 target_pixels = target_pixels.mean(1)[::-1]
-                target_pixels[0] += 130
+                target_pixels[0] += 170
                 # target_pixels = np.array([ix, iy])
                 # rot_mat, force_size = drone.calculate_needed_force_orientation(target_pixels, targets[target_chase_idx])
-                rot_mat, force_size = drone.point_and_shoot(target_pixels, multiplier=8, mode="frontarget")
+                # rot_mat, force_size = drone.point_and_shoot(target_pixels, multiplier=3, mode="level")
+                rot_mat, force_size = drone.calculate_needed_force_orientation(target_pixels, targets[target_chase_idx], mode="frontarget")
                 prune_object_list = drone.camera.pruned_objects_list(object_list)
                 # bbox2d_list = drone.camera.bbox2d(drone.camera.pruned_objects_list(prune_object_list))
                 # for bbox2d in bbox2d_list:

@@ -16,7 +16,7 @@ simulator:
     nu: 7 # icosphere resolution
     path:
       radius: 15 # meters
-      resolution: 3500 # points in total
+      resolution: 2200 # points in total
   obstacles:
     count: 1 # number of obstacles
     center: [0, 0, 0] # meters
@@ -42,7 +42,6 @@ drone:
   initial_position: [0, 0, 5] # meters
   initial_orientation: [0, 0, 0] # roll pitch yaw in degrees
   initial_velocity: [1, 0, 0] # m/s
-  multiplier_pid: [ 20, 0.2 , 1 ] # proportional, integral, derivative
   max_rates: 1000 # degrees/s
   mass: 250 # grams
   drag_coefficient: 0.2
@@ -50,16 +49,16 @@ drone:
   rates_transition_rate: 0.7 # smaller value reacts slower [0, 1]
   thrust_transition_rate: 0.5 # instant power: smaller value reacts slower [0, 1]
   trail_length: 0 # number of points in trail
-  keep_distance: 8 # meters
+  keep_distance: 5 # meters
   UWB_sensor_max_range: 13 # meters
   force_multiplier_pid:
-    kP: 1.0
-    kI: 1.0
-    kD: 5.0
+    kP: 20.0
+    kI: 15.0
+    kD: 1.0
     integral_clip: 10.0
-    min_output: 1.0
-    max_output: 90
-    derivative_transition_rate: 0.1 # Replacing Feedforward. Smaller value reacts slower but smoother [0, 1]
+    min_output: 0.01
+    max_output: 80
+    derivative_transition_rate: 0.5 # Replacing Feedforward. Smaller value reacts slower but smoother [0, 1]
 
 camera:
   camera_angle: 25.0 #degrees - pitch angle
@@ -71,7 +70,7 @@ camera:
 point_and_shoot:
   ref_frame: 'world'
   mode: 'level' # 'level' or 'frontarget'
-  virtual_drag_coefficient: 0.0
-  virtual_lift_coefficient: 0.7
-  tof_effective_distance: 1.0 # meters
+  virtual_drag_coefficient: 0.5
+  virtual_lift_coefficient: 0.1
+  tof_effective_distance: 2 # meters
 
