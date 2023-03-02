@@ -133,7 +133,7 @@ if __name__ == '__main__':
                 drone.step(action=action, wind_velocity_vector=wind_velocity_vector, object_list=object_list, rotation_matrix=None, thrust_force=None)
             else:
                 target_pixels = target_pixels.mean(1)[::-1]
-                target_pixels[0] += 170
+                target_pixels[0] += 50
                 # target_pixels = np.array([ix, iy])
                 # rot_mat, force_size = drone.calculate_needed_force_orientation(target_pixels, targets[target_chase_idx])
                 # rot_mat, force_size = drone.point_and_shoot(target_pixels, multiplier=3, mode="level")

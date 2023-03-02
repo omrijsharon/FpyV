@@ -270,6 +270,7 @@ class Drone:
         multiplier = self.force_multiplier_pid(measured_dist2target, self.keep_distance)
         print("self.force_multiplier_pid.error: ", self.force_multiplier_pid.error, "multiplier: ", multiplier)
         multiplier = np.clip(multiplier, self.force_multiplier_pid.min_output, self.force_multiplier_pid.max_output)
+        # multiplier = multiplier * 0 + 6.0
         force_vector = multiplier * dir2target + virtual_drag_force + virtual_lift_force - gravity
         force_vector_norm = np.linalg.norm(force_vector)
         if mode == "level": # level the drone, keep the y-axis at the horizon

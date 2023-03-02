@@ -5,20 +5,20 @@ simulator:
   frame_transition_rate: 0.2
   ground:
     size: 60 # meters
-    resolution: 100 # square points in total
+    resolution: 50 # square points in total
     random: true
   targets:
     count: 1 # number of targets
-    center: [0, 0, 1] # meters
+    center: [0, 0, 0.5] # meters
     std: 0.1 # meters
     size: 1.0 # meters
     variation: 0.1 # meters
-    nu: 7 # icosphere resolution
+    nu: 5 # icosphere resolution
     path:
-      radius: 15 # meters
-      resolution: 2200 # points in total
+      radius: 25 # meters
+      resolution: 220 # points in total
   obstacles:
-    count: 1 # number of obstacles
+    count: 0 # number of obstacles
     center: [0, 0, 0] # meters
     center_std: [10,10,0] # meters
     radius: 2 # meters
@@ -26,7 +26,7 @@ simulator:
     height: 10.0 # meters
     height_std: 5 # meters
     angle_resolution: 10 # points in total in a circle
-    height_resolution: 50 # points in total
+    height_resolution: 25 # points in total
     random: true
   track:
     count: 0 # number of gates in track
@@ -49,7 +49,7 @@ drone:
   rates_transition_rate: 0.7 # smaller value reacts slower [0, 1]
   thrust_transition_rate: 0.5 # instant power: smaller value reacts slower [0, 1]
   trail_length: 0 # number of points in trail
-  keep_distance: 5 # meters
+  keep_distance: 0 # meters
   UWB_sensor_max_range: 13 # meters
   force_multiplier_pid:
     kP: 20.0
@@ -61,9 +61,9 @@ drone:
     derivative_transition_rate: 0.5 # Replacing Feedforward. Smaller value reacts slower but smoother [0, 1]
 
 camera:
-  camera_angle: 25.0 #degrees - pitch angle
+  camera_angle: 30.0 #degrees - pitch angle
   position_relative_to_frame: [0.1, 0.0, 0.0] #meters
-  fov: 120.0 #degrees
+  fov: 140.0 #degrees
   resolution: [640, 480] #pixels
 
 
@@ -71,6 +71,6 @@ point_and_shoot:
   ref_frame: 'world'
   mode: 'level' # 'level' or 'frontarget'
   virtual_drag_coefficient: 0.5
-  virtual_lift_coefficient: 0.1
-  tof_effective_distance: 2 # meters
+  virtual_lift_coefficient: 0.3
+  tof_effective_distance: 5 # meters
 
