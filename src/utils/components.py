@@ -92,7 +92,7 @@ class Drone:
         self.gravity_force = None
         self.drag_force = None
         self.total_forces = None
-        self.dt = params["simulator"]["dt"]
+        self.dt = 1/params["simulator"]["fps"]
         self.mass = params["drone"]["mass"] / 1000 #kg
         self.drag_coef = params["drone"]["drag_coefficient"]
         self.thrust_multiplier = 80
@@ -242,8 +242,7 @@ class Drone:
         :param pixel: [x, y] pixel coordinates
         :param target: target to follow
         :param ref_frame: 'world' or 'drone'
-        :param mode: 'level' or 'frontarget' where the drone is leveled or facing the target
-        :param virtual_drag_coef: virtual drag coefficient
+        :param mode: 'level' or 'frontarget'. where the drone is leveled or facing the target.
         :return: rotation_matrix [3x3] (how the drone needs to be oriented), thrust_force
         """
         dir2target = self.camera.pixel2direction(pixel)
@@ -274,16 +273,22 @@ class Drone:
         force_vector = multiplier * dir2target + virtual_drag_force + virtual_lift_force - gravity
         force_vector_norm = np.linalg.norm(force_vector)
         if mode == "level": # level the drone, keep the y-axis at the horizon
-            horizon_vector = np.cross(force_vector, gravity)
-            front_vector = np.cross(horizon_vector, force_vector)
+            drone_y_vector = np.cross(force_vector, gravity)
+            drone_x_vector = np.cross(drone_y_vector, force_vector)
         elif mode == "frontarget": # keep the y-axis perpendicular to drone-target vector so the drone is facing the target.
-            horizon_vector = np.cross(force_vector, dir2target)
-            front_vector = np.cross(horizon_vector, force_vector)
+            drone_y_vector = np.cross(force_vector, dir2target)
+            drone_x_vector = np.cross(drone_y_vector, force_vector)
         else:
             raise ValueError('Unknown mode')
-        rotation_to_apply_force = np.stack([front_vector, horizon_vector, force_vector], axis=1)
+        rotation_to_apply_force = np.stack([drone_x_vector, drone_y_vector, force_vector], axis=1)
         rotation_to_apply_force = rotation_to_apply_force / np.linalg.norm(rotation_to_apply_force, axis=0)
         return rotation_to_apply_force, force_vector_norm
+
+    @staticmethod
+    def rotate_yaw(rot_mat, theta):
+        # inplace rotation
+        rot_mat[:, 0], rot_mat[:, 1] = np.cos(theta) * rot_mat[:, 0] - np.sin(theta) * rot_mat[:, 1],\
+                                       np.sin(theta) * rot_mat[:, 0] + np.cos(theta) * rot_mat[:, 1]
 
     def point_and_shoot(self, pixel, multiplier, ref_frame='world', mode="level"):
         """

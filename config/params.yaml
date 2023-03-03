@@ -1,5 +1,5 @@
 simulator:
-  dt: 0.03 # seconds
+  fps: 60 # frames per second
   gravity: 9.81 # m/s^2
   render_dim: 2 # dimensions
   frame_transition_rate: 0.2
@@ -15,8 +15,8 @@ simulator:
     variation: 0.1 # meters
     nu: 5 # icosphere resolution
     path:
-      radius: 25 # meters
-      resolution: 220 # points in total
+      radius: 15 # meters
+      resolution: 2220 # points in total
   obstacles:
     count: 0 # number of obstacles
     center: [0, 0, 0] # meters
@@ -49,15 +49,15 @@ drone:
   rates_transition_rate: 0.7 # smaller value reacts slower [0, 1]
   thrust_transition_rate: 0.5 # instant power: smaller value reacts slower [0, 1]
   trail_length: 0 # number of points in trail
-  keep_distance: 0 # meters
+  keep_distance: 6 # meters
   UWB_sensor_max_range: 13 # meters
   force_multiplier_pid:
     kP: 20.0
     kI: 15.0
     kD: 1.0
     integral_clip: 10.0
-    min_output: 0.01
-    max_output: 80
+    min_output: 0.05
+    max_output: 40
     derivative_transition_rate: 0.5 # Replacing Feedforward. Smaller value reacts slower but smoother [0, 1]
 
 camera:
@@ -71,6 +71,6 @@ point_and_shoot:
   ref_frame: 'world'
   mode: 'level' # 'level' or 'frontarget'
   virtual_drag_coefficient: 0.5
-  virtual_lift_coefficient: 0.3
-  tof_effective_distance: 5 # meters
+  virtual_lift_coefficient: 0.1
+  tof_effective_distance: 2 # meters
 
