@@ -108,7 +108,7 @@ class Drone:
                              focal_length=None
                              )
         self.trail = Trail(params["drone"]["trail_length"])
-        self.force_multiplier_pid = PID(**params["drone"]["force_multiplier_pid"], dt=params["simulator"]["dt"])
+        self.force_multiplier_pid = PID(**params["drone"]["force_multiplier_pid"], dt=self.dt)
         self.virtual_drag_coef = params["point_and_shoot"]["virtual_drag_coefficient"]
         self.virtual_lift_coef = params["point_and_shoot"]["virtual_lift_coefficient"]
         self.tof_effective_dist = params["point_and_shoot"]["tof_effective_distance"]
