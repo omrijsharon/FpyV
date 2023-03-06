@@ -56,8 +56,8 @@ drone:
     kI: 15.0
     kD: 1.0
     integral_clip: 10.0
-    min_output: 0.05
-    max_output: 40
+    min_output: 0.05 # not in use
+    max_output: 40 # not in use
     derivative_transition_rate: 0.5 # Replacing Feedforward. Smaller value reacts slower but smoother [0, 1]
 
 camera:
