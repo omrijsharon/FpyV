@@ -9,14 +9,14 @@ simulator:
     random: true
   targets:
     count: 1 # number of targets
-    center: [0, 0, 0.5] # meters
+    center: [0, 0, 3.0] # meters
     std: 0.1 # meters
     size: 1.0 # meters
     variation: 0.1 # meters
     nu: 5 # icosphere resolution
     path:
       radius: 15 # meters
-      resolution: 2220 # points in total
+      resolution: 500 # points in total
   obstacles:
     count: 0 # number of obstacles
     center: [0, 0, 0] # meters
@@ -52,16 +52,16 @@ drone:
   keep_distance: 6 # meters
   UWB_sensor_max_range: 13 # meters
   force_multiplier_pid:
-    kP: 20.0
-    kI: 15.0
-    kD: 1.0
-    integral_clip: 10.0
+    kP: 0.1
+    kI: 2.0
+    kD: 0.05
+    integral_clip: 100.0
     min_output: 0.05 # not in use
     max_output: 40 # not in use
-    derivative_transition_rate: 0.5 # Replacing Feedforward. Smaller value reacts slower but smoother [0, 1]
+    derivative_transition_rate: 0.2 # Replacing Feedforward. Smaller value reacts slower but smoother [0, 1]
 
 camera:
-  camera_angle: 30.0 #degrees - pitch angle
+  camera_angle: 25.0 #degrees - pitch angle
   position_relative_to_frame: [0.1, 0.0, 0.0] #meters
   fov: 140.0 #degrees
   resolution: [640, 480] #pixels

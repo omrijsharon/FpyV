@@ -311,7 +311,7 @@ class Drone:
         :return: force vector [3x1] in world reference frame
         """
         # virtual target relative to real target
-        virtual_target_position = action[2:] * 100  # convert action[2:] to virtual target position in pixels
+        virtual_target_position = action[2:] * self.camera.resolution/2  # convert action[2:] to virtual target position in pixels
         pixel = pixel + virtual_target_position
 
         if self.prev_pixel is None: # first time
@@ -320,6 +320,7 @@ class Drone:
         else:
             self.pixel_velocity = (pixel - self.prev_pixel) / self.dt
             self.prev_pixel = pixel
+        # print(self.pixel_velocity)
         dir2target = self.camera.pixel2direction(pixel)
         # virtual drag is applied more and more when the velocity is in the opposite direction of the target
         if ref_frame == 'world':
@@ -336,13 +337,18 @@ class Drone:
         virtual_lift_force = (self.position[2] < self.tof_effective_dist) * -(self.tof_effective_dist - self.position[2]) * self.virtual_lift_coef * gravity * -(np.clip(self.velocity[2], a_min=-np.inf, a_max=0))
 
         # target relative to screen
-        target_velocity_y_axis = action[0] * 100 # convert action[0] to target velocity in the y axis in pixels/second
-        multiplier = self.force_multiplier_pid(self.pixel_velocity, target_velocity_y_axis)
-        target_position_x_axis = self.camera.resolution[0] / 2 * (1 + action[1]) # convert action[1] to target position in the x axis in pixels
-        yaw_angle = np.arctan2(target_position_x_axis / 2, self.camera.focal_length)
+        position = self.convert_action2position(action)
+        # target_position_y_axis = self.camera.resolution[1] / 2 * (1 + action[1]) # convert action[0] to target position in the y axis in pixels
+        multiplier = self.force_multiplier_pid(pixel[1], position[1])
+        # print(multiplier)
+        force_vector = multiplier * dir2target + virtual_drag_force + virtual_lift_force - gravity
+        force_vector_norm = np.linalg.norm(force_vector)
+        # target_position_x_axis = self.camera.resolution[0] / 2 * (1 + action[0]) # convert action[1] to target position in the x axis in pixels
+        yaw_angle = np.arctan2(position[0] - self.camera.resolution[0] / 2, self.camera.focal_length)
         critiria = 0.9999
         counter = 0
-        while critiria < 1:
+        while force_vector_norm > self.max_throttle_in_force:
+            print("ahhhhhhhhh")
             multiplier = np.clip(multiplier * critiria, self.force_multiplier_pid.min_output, self.force_multiplier_pid.max_output)
             force_vector = multiplier * dir2target + virtual_drag_force + virtual_lift_force - gravity
             force_vector_norm = np.linalg.norm(force_vector)
@@ -363,9 +369,15 @@ class Drone:
         else:
             raise ValueError('Unknown mode')
         rotation_to_apply_force = np.stack([front_vector, horizon_vector, force_vector], axis=1)
-        self.rotate_yaw(rotation_to_apply_force, yaw_angle)
+        # self.rotate_yaw(rotation_to_apply_force, yaw_angle)
         rotation_to_apply_force = rotation_to_apply_force / np.linalg.norm(rotation_to_apply_force, axis=0)
         return rotation_to_apply_force, force_vector_norm
+
+    def convert_action2position(self, action):
+        position = np.zeros(2)
+        for i in range(2):
+            position[i] = (self.camera.resolution[i] / 2 * (1 + action[i]))
+        return position.astype(int)
 
     def point_and_shoot_optimizer(self, pixel, ref_frame='world', mode="level"):
         """
