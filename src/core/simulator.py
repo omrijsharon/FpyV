@@ -86,7 +86,7 @@ if __name__ == '__main__':
         ax.clear()
         [target.update() for target in targets]
         if i % 1 == 0:
-            action = np.array([0.2, -0.2, -0.2, -0.5])
+            action = np.array([-0.1, 0.0, 0.0, 0.0])
         # drone.step(action=action, wind_velocity_vector=wind_velocity_vector)
         if drone.done:
             print("Crashed")
@@ -137,9 +137,9 @@ if __name__ == '__main__':
                 # target_pixels = np.array([ix, iy])
                 # rot_mat, force_size = drone.calculate_needed_force_orientation(target_pixels, targets[target_chase_idx])
                 pns_action = np.zeros(4)
-                pns_action[1] = -0.6
-                pns_action[2] = -0.0
-                pns_action[3] = 0.0
+                pns_action[1] = -0.5
+                pns_action[2] = -0.5
+                pns_action[3] = -0.1
                 rot_mat, force_size = drone.point_and_shoot(target_pixels, action=pns_action, mode="level")
                 # rot_mat, force_size = drone.calculate_needed_force_orientation(target_pixels, targets[target_chase_idx], mode="frontarget")
                 prune_object_list = drone.camera.pruned_objects_list(object_list)
@@ -150,8 +150,9 @@ if __name__ == '__main__':
                 # add circle where the target is on the image:
                 cv2.circle(img, tuple(target_pixels.astype(int)), 10, (255, 255, 255), 1)
                 position = drone.convert_action2position(pns_action)
-                cv2.circle(img, tuple(position + (pns_action[2:] * drone.camera.resolution/2).astype(int)), 5, (127, 127, 127), 2)
-                drone.step(action, wind_velocity_vector=wind_velocity_vector, object_list=object_list, rotation_matrix=rot_mat, thrust_force=force_size)
+                cv2.circle(img, tuple(position - (pns_action[2:] * drone.camera.resolution/2).astype(int)), 5, (127, 127, 127), 2)
+                # drone.step(action, wind_velocity_vector=wind_velocity_vector, object_list=object_list, rotation_matrix=rot_mat, thrust_force=force_size)
+                drone.step(action=None, wind_velocity_vector=wind_velocity_vector, object_list=object_list)
 
                 img = cv2.putText(img.astype(np.uint8), f"dist2target: {distance(drone, targets[0]):.2f} m, "
                                                         f"velocity: {3.6 * np.linalg.norm(drone.velocity):.2f} kph, "

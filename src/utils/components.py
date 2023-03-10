@@ -221,8 +221,7 @@ class Drone:
                 !!! IRL the drone doesn't know its state: Only IMU measurements and orientation !!!
         """
         if action is None:
-            throttle, roll, pitch, arm, _, yaw = self.rc.calib_read()
-            action = np.array([-roll, pitch, yaw, throttle])
+            action = self.read_sticks()
         self.thrust, self.rates = self.action2force(action)
         self.drag_force = kinematics.calculate_drag(self.state, wind_velocity_vector, self.drag_coef)
         self.gravity_force = kinematics.gravity_vector(self.mass, g=self.gravity)
@@ -243,6 +242,11 @@ class Drone:
         self.trail.update(self.position)
         angular_velocity_matrix = kinematics.rotation_matrix_from_euler_angles(*self.rates)
         return self.rotation_matrix.T, angular_velocity_matrix, self.rotation_matrix @ self.acceleration
+
+    def read_sticks(self):
+        throttle, roll, pitch, arm, _, yaw = self.rc.calib_read()
+        action = np.array([-roll, pitch, yaw, throttle])
+        return action
 
     def get_gravity_force_in_drone_ref_frame(self):
         return self.rotation_matrix @ kinematics.gravity_vector(self.mass, g=9.81)
@@ -348,7 +352,6 @@ class Drone:
         critiria = 0.9999
         counter = 0
         while force_vector_norm > self.max_throttle_in_force:
-            print("ahhhhhhhhh")
             multiplier = np.clip(multiplier * critiria, self.force_multiplier_pid.min_output, self.force_multiplier_pid.max_output)
             force_vector = multiplier * dir2target + virtual_drag_force + virtual_lift_force - gravity
             force_vector_norm = np.linalg.norm(force_vector)

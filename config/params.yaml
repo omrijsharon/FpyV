@@ -15,8 +15,8 @@ simulator:
     variation: 0.1 # meters
     nu: 5 # icosphere resolution
     path:
-      radius: 15 # meters
-      resolution: 500 # points in total
+      radius: 25 # meters
+      resolution: 5500 # points in total
   obstacles:
     count: 0 # number of obstacles
     center: [0, 0, 0] # meters
