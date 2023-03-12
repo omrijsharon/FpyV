@@ -1,7 +1,7 @@
 import numpy as np
 
 from utils.components import Gate, Target, Cylinder
-from utils.helper_functions import rotation_matrix_from_euler_angles
+from utils.helper_functions import euler_angles_to_rotation_matrix
 
 
 def generate_track(count, radius, gate_size, gate_resolution):
@@ -10,7 +10,7 @@ def generate_track(count, radius, gate_size, gate_resolution):
     gates = []
     shapes = ["rectangle", "circle", "half_circle"]
     for i, p in enumerate(gates_positions):
-        rotmat = rotation_matrix_from_euler_angles(0, 0, theta[i] + np.pi / 2)
+        rotmat = euler_angles_to_rotation_matrix(0, 0, theta[i] + np.pi / 2)
         if shapes[i % 3] == "circle":
             gates.append(Gate(p + np.array([0, 0, gate_size / 2]), rotmat, gate_size / 2, shape=shapes[i % 3], resolution=gate_resolution))
         else:

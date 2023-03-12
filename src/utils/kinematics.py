@@ -1,6 +1,6 @@
 import numpy as np
 
-from utils.helper_functions import rotation_matrix_from_euler_angles
+from utils.helper_functions import euler_angles_to_rotation_matrix
 
 
 # from numba import jit
@@ -27,7 +27,7 @@ def update_kinematic_step(cart_state, rotation_matrix, acceleration, rates, dt):
 def rotate_body_by_rates(rotation_matrix, rates, dt): # rates in degrees per second
     # rotates the body in the body reference frame and returns rotation matrix in world reference frame
     rates_dt = np.deg2rad(rates) * dt
-    return (rotation_matrix_from_euler_angles(*rates_dt) @ rotation_matrix.T).T
+    return (euler_angles_to_rotation_matrix(*rates_dt) @ rotation_matrix.T).T
 
 
 def drag_coefficient(coefficient_vector, rotation_matrix, air_velocity):

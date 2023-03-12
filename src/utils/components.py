@@ -8,7 +8,7 @@ from icosphere import icosphere
 
 from utils import kinematics, render3d, get_sticks, yaml_helper
 from utils.flight_time_calculator import read_motor_test_report, model_xy
-from utils.helper_functions import rotation_matrix_from_euler_angles, intrinsic_matrix, bbox3d, WORLD2CAM, \
+from utils.helper_functions import euler_angles_to_rotation_matrix, intrinsic_matrix, bbox3d, WORLD2CAM, \
     generate_circular_path
 
 
@@ -148,7 +148,7 @@ class Drone:
         self.state = np.zeros(2 * self.dim)
         self.state[:self.dim] = position
         self.state[self.dim:] = velocity
-        self.rotation_matrix = rotation_matrix_from_euler_angles(*np.deg2rad(ypr))
+        self.rotation_matrix = euler_angles_to_rotation_matrix(*np.deg2rad(ypr))
         self.acceleration = np.zeros(self.dim)
         self.rates = np.zeros(self.dim)
         self.thrust = np.zeros(self.dim)
@@ -240,7 +240,7 @@ class Drone:
         self.update()
         self.camera.update(self.position, self.rotation_matrix)
         self.trail.update(self.position)
-        angular_velocity_matrix = kinematics.rotation_matrix_from_euler_angles(*self.rates)
+        angular_velocity_matrix = kinematics.euler_angles_to_rotation_matrix(*self.rates)
         return self.rotation_matrix.T, angular_velocity_matrix, self.rotation_matrix @ self.acceleration
 
     def read_sticks(self):
@@ -448,7 +448,7 @@ class Camera:
         self.focal_length = focal_length
         self.relative_position = position_relative_to_frame
         # for fixed camera angle (like in real FPV)
-        self.relative_rotation_matrix = WORLD2CAM.T @ rotation_matrix_from_euler_angles(np.deg2rad(camera_pitch_angle), 0, 0)
+        self.relative_rotation_matrix = WORLD2CAM.T @ euler_angles_to_rotation_matrix(np.deg2rad(camera_pitch_angle), 0, 0)
         self.position = None
         self.rotation_matrix = None
         self.image = None

@@ -36,12 +36,30 @@ def rotation_matrix(angle, axis: str):
     return dR
 
 
-def rotation_matrix_from_euler_angles(roll, pitch, yaw):
+def euler_angles_to_rotation_matrix(roll, pitch, yaw):
     R_x = rotation_matrix(roll, 'x')
     R_y = rotation_matrix(pitch, 'y')
     R_z = rotation_matrix(yaw, 'z')
     return R_z @ R_y @ R_x
     # return R_x @ R_y @ R_z
+
+
+def rotation_matrix_to_euler_angles(R):
+    # https://www.euclideanspace.com/maths/geometry/rotations/conversions/matrixToEuler/index.htm
+    # Assuming the angles are in radians.
+    if R[2, 0] != 1 or R[2, 0] != -1:
+        x = np.arctan2(R[2, 1], R[2, 2])
+        y = np.arcsin(-R[2, 0])
+        z = np.arctan2(R[1, 0], R[0, 0])
+    else:
+        z = 0 # can be anything
+        if R[2, 0] == -1:
+            x = np.arctan2(R[0, 1], R[0, 2])
+            y = np.pi / 2
+        else:
+            x = np.arctan2(-R[0, 1], -R[0, 2])
+            y = -np.pi / 2
+    return np.array([x, y, z])
 
 
 def rotation_matrix_to_quaternion(R):
@@ -133,3 +151,43 @@ def point_to_surface_distance(point, surface):
 def generate_circular_path(center, radius, resolution):
     theta = np.linspace(0, 2 * np.pi, resolution + 1)[:-1]
     return np.vstack((np.cos(theta) * radius, np.sin(theta) * radius, np.zeros_like(theta))).T + np.array(center)
+
+
+def rotation_matrix_to_axis_angle(R):
+    """
+    Calculate the axis-angle representation from a rotation matrix.
+    """
+    angle = np.arccos((np.trace(R) - 1) / 2)
+    if angle == 0:
+        axis = np.array([1, 0, 0])
+    elif angle == np.pi:
+        s = np.sqrt((R[0,0]+1)/2)
+        x = s*np.sign(R[0,1])
+        y = s*np.sign(R[0,2])
+        z = 0
+        axis = np.array([x, y, z])
+    else:
+        axis = np.array([R[2,1] - R[1,2],
+                         R[0,2] - R[2,0],
+                         R[1,0] - R[0,1]])
+        axis /= np.linalg.norm(axis)
+    return axis, angle
+
+
+def axis_angle_to_rotation_matrix(axis, angle):
+    """
+    Convert axis-angle representation to rotation matrix.
+
+    :param axis: np.array, axis of rotation.
+    :param angle: float, angle of rotation.
+    :return: np.array, 3x3 rotation matrix.
+    """
+    c = np.cos(angle)
+    s = np.sin(angle)
+    t = 1 - c
+    x, y, z = axis
+    return np.array([
+        [t * x ** 2 + c, t * x * y - s * z, t * x * z + s * y],
+        [t * x * y + s * z, t * y ** 2 + c, t * y * z - s * x],
+        [t * x * z - s * y, t * y * z + s * x, t * z ** 2 + c]
+    ])
