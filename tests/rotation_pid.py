@@ -81,50 +81,11 @@ class PController:
         self.error = np.zeros(3)
         self.rates = np.zeros(3)
 
-    def get_rates(self, R_current, R_goal, axis='x'):
-        if axis is None:
-            # Calculate the relative rotation matrix
-            R_rel = np.matmul(R_goal, R_current.T) # working!
-            # Convert the relative rotation matrix to axis-angle representation
-            axis, angle = rotation_matrix_to_axis_angle(R_rel.T)
-            self.error = angle * axis
-
-            # Convert the relative rotation matrix to Euler angles
-            # self.error = np.rad2deg(rotation_matrix_to_euler_angles(R_rel.T))
-        else:
-            idx = np.argwhere(self.axes_names == axis).item()
-            angle = np.sign(np.dot(R_current[:, idx], R_goal[:, idx]))
-            # R_axis = np.cross(R_current[:, idx], R_goal[:, idx])
-            R_axis = np.cross(R_current[:, idx], R_goal[:, idx])
-            # R_target = axis_angle_to_rotation_matrix(R_axis, angle)
-            self.error = R_axis
-        # self.error = angle * R_axis
-        # print(f"error norm: {np.linalg.norm(self.error)}")
-        # self.error = self.error / np.linalg.norm(self.error) * (direction-1)
-        # Calculate the error and the rate of change of the error
-        # self.error = np.cross(x_current, x_goal)
-
-
-        # Calculate the error and the rate of change of the error
-        # if self.error_prev is not None:
-        #     error_dot = (error - self.error_prev) / dt
-        # else:
-        #     error_dot = np.zeros(3)
-        # self.error_prev = self.error
-
-        # # Calculate the rate of change of R:
-        # if self.R_prev is not None:
-        #     R_dot = np.dot(R_current, self.R_prev.T) / dt
-        #     angular_velocity = axis * angle / dt + np.dot(R_dot, axis)
-        # else:
-        #     angular_velocity = np.zeros(3)
-        # self.R_prev = R_current
-        # error_dot = np.rad2deg(np.trace(R_dot @ R_rel.T))
-
-        # Calculate the control signal using PD control
-        # self.rates = np.clip(self.Kp * self.error, -self.max_rates, self.max_rates)
+    def get_rates(self, R_current, R_goal):
+        # Calculate the relative rotation matrix
+        R_rel = np.matmul(R_goal.T, R_current)# working!
+        self.error = rotation_matrix_to_euler_angles(R_rel)
         self.rates = np.clip(self.Kp * np.rad2deg(self.error), -self.max_rates, self.max_rates)
-
         return self.rates
 
 
@@ -160,21 +121,19 @@ if __name__ == '__main__':
     fps = 60
     dt = 1 / fps
     max_rates = 1000
-    env = Rotate(dt=dt, max_rates=max_rates, threshold=1e-3, difficulty=0.1)
+    env = Rotate(dt=dt, max_rates=max_rates, threshold=1e-3, difficulty=50.0)
     # pids = [PID(kP=1, kI=0, kD=0, dt=env.dt, integral_clip=1, min_output=0.3, max_output=1, derivative_transition_rate=0.5) for _ in range(3)]
-    controller = PController(Kp=40.0, max_rates=max_rates)
+    controller = PController(Kp=100.0, max_rates=max_rates)
     state = env.reset()
     controller.reset()
     error_array = np.empty((0, 3))
     rates_array = np.empty((0, 3))
     reward_array = np.empty((0,))
     # [pid.reset() for pid in pids]
-    is_plot = False
+    is_plot = True
     plots_names = ["error roll", "error pitch", "error yaw", "rates roll", "rates pitch", "rates yaw", "reward"]
     if is_plot:
         fig, ax = plt.subplots(3, 3, sharex=True)
-    axis = 'x'
-    mask = np.ones(3, dtype=bool)
     while env.done is False:
         goal = state[:, :, 0]
         current = state[:, :, 1]
@@ -182,12 +141,7 @@ if __name__ == '__main__':
         # rpy = np.rad2deg(rotation_matrix_to_euler_angles(relative))
         # print(euler_angles_to_rotation_matrix(roll, pitch, yaw), "\n", relative)
         # action = controller.get_rates(current, goal, env.dt)
-        rates = controller.get_rates(current, goal, axis=axis) * mask
-        if np.linalg.norm(controller.error) < 1e-2:
-            axis = None
-            controller.Kp *= 10.0
-            mask[1:] = False
-            print("mask: ", mask)
+        rates = controller.get_rates(current, goal)
         action = env.convert_rates_to_action(rates)
         error_array = np.concatenate([error_array, np.expand_dims(controller.error, axis=0)], axis=0)
         rates_array = np.concatenate([rates_array, np.expand_dims(rates, axis=0)], axis=0)
