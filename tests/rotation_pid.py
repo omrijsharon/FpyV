@@ -3,13 +3,23 @@ import matplotlib.pyplot as plt
 from utils.components import PID
 import gym
 from time import sleep
+from utils import get_sticks, yaml_helper
 from utils.helper_functions import euler_angles_to_rotation_matrix, rotation_matrix_to_euler_angles, rotation_matrix_to_axis_angle, axis_angle_to_rotation_matrix
 from utils.kinematics import rotate_body_by_rates
 from utils.render3d import plot_3d_rotation_matrix, init_3d_axis, show_plot
 
 class Rotate(gym.Env):
-    def __init__(self, dt=1e-2, max_rates=1000, threshold=1e-3, difficulty=1.0):
+    def __init__(self, dt=1e-2, max_rates=1000, threshold=1e-3, difficulty=1.0, params=None):
         super().__init__()
+        # Joystick
+        self.rc = get_sticks.Joystick()
+        self.run = self.rc.status
+        if self.run:
+            print("Joystick connected")
+        else:
+            print("Joystick device was not found")
+        self.rc.calibrate(params["drone"]["joystick_calib_path"], load_calibration_file=True)
+
         self.goal_state: np.array = None
         self.current_state: np.array = None
         self.observation_space = gym.spaces.Box(low=-1, high=1, shape=(3, 3, 2))
@@ -21,6 +31,16 @@ class Rotate(gym.Env):
         self.threshold = threshold
         self.difficulty = difficulty
         self.ax, self.fig = init_3d_axis()
+
+    def read_sticks(self):
+        throttle, roll, pitch, arm, _, yaw = self.rc.calib_read()
+        action = np.array([-roll, pitch, yaw, throttle])
+        return action
+
+    def convert_action_to_angle(self, action):
+        action = action[:3] * np.pi
+        action[1] /= 2
+        return action
 
     def convert_action_to_rates(self, action):
         return action * self.max_rates
@@ -35,7 +55,11 @@ class Rotate(gym.Env):
         return ((self.goal_state.T @ self.current_state - np.eye(3))**2).sum()
 
     def reset(self):
-        euler_goal = np.random.uniform(0, 2 * np.pi, size=3)
+        if self.run:
+            goal_action = self.read_sticks()
+            euler_goal = self.convert_action_to_angle(goal_action)
+        else:
+            euler_goal = np.random.uniform(0, 2 * np.pi, size=3)
         euler_current = (euler_goal + np.random.normal(0, self.difficulty, size=3)) % (2 * np.pi)
         self.goal_state = euler_angles_to_rotation_matrix(*euler_goal)
         self.current_state = euler_angles_to_rotation_matrix(*euler_current)
@@ -43,6 +67,10 @@ class Rotate(gym.Env):
         return self.cat_goal_state()
 
     def step(self, action):
+        if self.run:
+            goal_action = self.read_sticks()
+            euler_goal = self.convert_action_to_angle(goal_action)
+            self.goal_state = euler_angles_to_rotation_matrix(*euler_goal)
         rates = self.convert_action_to_rates(action)
         self.current_state = rotate_body_by_rates(self.current_state, rates, self.dt)
         if self.get_error() < self.threshold:
@@ -69,74 +97,60 @@ class Rotate(gym.Env):
         return self.step(x)
 
 
-class PController:
-    def __init__(self, Kp, max_rates):
-        self.Kp = Kp
+class RotationRatesController:
+    def __init__(self, gain, max_rates, transition_coef=0.9):
+        self.gain = gain * np.ones(shape=(3,))
         self.max_rates = max_rates
         self.error = np.zeros(3)
         self.rates = np.zeros(3)
         self.axes_names = np.array(['x', 'y', 'z'])
+        self.prev_error = np.zeros(3)
+        assert 0 <= transition_coef <= 1, "Transition coefficient must be in range [0, 1]"
+        self.transition_coef = transition_coef
 
     def reset(self):
         self.error = np.zeros(3)
         self.rates = np.zeros(3)
+        self.prev_error = np.zeros(3)
 
     def get_rates(self, R_current, R_goal):
         # Calculate the relative rotation matrix
         R_rel = np.matmul(R_goal.T, R_current)# working!
-        self.error = rotation_matrix_to_euler_angles(R_rel)
-        self.rates = np.clip(self.Kp * np.rad2deg(self.error), -self.max_rates, self.max_rates)
+        # print(np.diag(R_rel))
+        self.error = self.transition_coef * rotation_matrix_to_euler_angles(R_rel) + (1 - self.transition_coef) * self.prev_error
+        self.rates = np.clip(self.gain * np.rad2deg(self.error), -self.max_rates, self.max_rates)
         return self.rates
 
-
-class PDController1axis:
-    def __init__(self, Kp, Kd, max_torque):
-        self.Kp = Kp
-        self.Kd = Kd
-        self.max_torque = max_torque
-        self.R_target = None
-        self.R_target_inv = None
-
-    def get_torque(self, R_current, R_goal, dt):
-        # Calculate the target rotation matrix
-        if self.R_target is None:
-            x_goal = R_goal[:, 0]
-            x_current = R_current[:, 0]
-            R_axis = np.cross(x_current, x_goal)
-            angle = np.arccos(np.dot(x_current, x_goal))
-            self.R_target = axis_angle_to_rotation_matrix(R_axis, angle)
-            self.R_target_inv = self.R_target.T
-        # Calculate the error and the rate of change of the error
-        error = self.R_target_inv.dot(R_current) - np.eye(3)
-        error_dot = -np.dot(self.R_target_inv, angular_velocity_from_rotation_matrix2(R_current, R_goal, dt))
-
-        # Calculate the control signal using PD control
-        torque = np.clip(self.Kp.dot(error.flatten()) + self.Kd.dot(error_dot.flatten()), -self.max_torque,
-                         self.max_torque)
-
-        return torque
 
 
 if __name__ == '__main__':
     fps = 60
     dt = 1 / fps
-    max_rates = 1000
-    env = Rotate(dt=dt, max_rates=max_rates, threshold=1e-3, difficulty=50.0)
+    max_rates = 2*480
+    params = yaml_helper.yaml_reader(r"C:\Users\omri_\PycharmProjects\FpyV\config\params.yaml")
+    env = Rotate(dt=dt, max_rates=max_rates, threshold=1e-3, difficulty=1.0, params=params)
     # pids = [PID(kP=1, kI=0, kD=0, dt=env.dt, integral_clip=1, min_output=0.3, max_output=1, derivative_transition_rate=0.5) for _ in range(3)]
-    controller = PController(Kp=100.0, max_rates=max_rates)
+    controller = RotationRatesController(gain=120.0, max_rates=max_rates, transition_coef=0.1)
     state = env.reset()
     controller.reset()
     error_array = np.empty((0, 3))
     rates_array = np.empty((0, 3))
     reward_array = np.empty((0,))
     # [pid.reset() for pid in pids]
-    is_plot = True
+    is_plot = False
     plots_names = ["error roll", "error pitch", "error yaw", "rates roll", "rates pitch", "rates yaw", "reward"]
     if is_plot:
         fig, ax = plt.subplots(3, 3, sharex=True)
-    while env.done is False:
+    env.render()
+    noise_lvl = 0.1
+    done = False
+    # while env.done is False:
+    while not done:
         goal = state[:, :, 0]
         current = state[:, :, 1]
+        noise_angles = (np.random.normal(0, noise_lvl, size=3))
+        print(noise_angles)
+        current = euler_angles_to_rotation_matrix(*np.deg2rad(noise_angles % (2 * np.pi))) @ current
         # relative = goal @ current.T
         # rpy = np.rad2deg(rotation_matrix_to_euler_angles(relative))
         # print(euler_angles_to_rotation_matrix(roll, pitch, yaw), "\n", relative)
@@ -145,7 +159,7 @@ if __name__ == '__main__':
         action = env.convert_rates_to_action(rates)
         error_array = np.concatenate([error_array, np.expand_dims(controller.error, axis=0)], axis=0)
         rates_array = np.concatenate([rates_array, np.expand_dims(rates, axis=0)], axis=0)
-        state, reward, done, info = env.step(action)
+        state, reward, _, info = env.step(action)
         reward_array = np.append(reward_array, reward)
         if is_plot:
             for i in range(3):
