@@ -98,26 +98,32 @@ class Rotate(gym.Env):
 
 
 class RotationRatesController:
-    def __init__(self, gain, max_rates, transition_coef=0.9):
+    def __init__(self, gain, max_rates, error_transition_coef=0.9, goal_transition_coef=1.0):
         self.gain = gain * np.ones(shape=(3,))
         self.max_rates = max_rates
         self.error = np.zeros(3)
         self.rates = np.zeros(3)
         self.axes_names = np.array(['x', 'y', 'z'])
         self.prev_error = np.zeros(3)
-        assert 0 <= transition_coef <= 1, "Transition coefficient must be in range [0, 1]"
-        self.transition_coef = transition_coef
+        self.prev_goal = np.zeros(3)
+        assert 0 <= error_transition_coef <= 1 and 0 <= goal_transition_coef <= 1, "Transition coefficients should be in [0, 1]"
+        self.error_transition_coef = error_transition_coef
+        self.goal_transition_coef = goal_transition_coef
 
     def reset(self):
         self.error = np.zeros(3)
         self.rates = np.zeros(3)
         self.prev_error = np.zeros(3)
+        self.prev_goal = np.zeros(3)
 
     def get_rates(self, R_current, R_goal):
+        euler_goal = self.goal_transition_coef * rotation_matrix_to_euler_angles(R_goal) + (1 - self.goal_transition_coef) * self.prev_goal
+        self.prev_goal = euler_goal
+        R_goal = euler_angles_to_rotation_matrix(*euler_goal)
         # Calculate the relative rotation matrix
         R_rel = np.matmul(R_goal.T, R_current)# working!
         # print(np.diag(R_rel))
-        self.error = self.transition_coef * rotation_matrix_to_euler_angles(R_rel) + (1 - self.transition_coef) * self.prev_error
+        self.error = self.error_transition_coef * rotation_matrix_to_euler_angles(R_rel) + (1 - self.error_transition_coef) * self.prev_error
         self.rates = np.clip(self.gain * np.rad2deg(self.error), -self.max_rates, self.max_rates)
         return self.rates
 
@@ -130,7 +136,7 @@ if __name__ == '__main__':
     params = yaml_helper.yaml_reader(r"C:\Users\omri_\PycharmProjects\FpyV\config\params.yaml")
     env = Rotate(dt=dt, max_rates=max_rates, threshold=1e-3, difficulty=1.0, params=params)
     # pids = [PID(kP=1, kI=0, kD=0, dt=env.dt, integral_clip=1, min_output=0.3, max_output=1, derivative_transition_rate=0.5) for _ in range(3)]
-    controller = RotationRatesController(gain=120.0, max_rates=max_rates, transition_coef=0.1)
+    controller = RotationRatesController(gain=120.0, max_rates=max_rates, error_transition_coef=0.1, goal_transition_coef=0.1)
     state = env.reset()
     controller.reset()
     error_array = np.empty((0, 3))
@@ -142,7 +148,7 @@ if __name__ == '__main__':
     if is_plot:
         fig, ax = plt.subplots(3, 3, sharex=True)
     env.render()
-    noise_lvl = 0.1
+    noise_lvl = 5.0
     done = False
     # while env.done is False:
     while not done:
