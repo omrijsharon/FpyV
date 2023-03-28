@@ -155,7 +155,7 @@ if __name__ == '__main__':
     rates_array = np.empty((0, 3))
     reward_array = np.empty((0,))
     # [pid.reset() for pid in pids]
-    is_plot = True
+    is_plot = False
     plots_names = ["error roll", "error pitch", "error yaw", "rates roll", "rates pitch", "rates yaw", "reward"]
     if is_plot:
         fig, ax = plt.subplots(3, 3, sharex=True)
@@ -167,7 +167,7 @@ if __name__ == '__main__':
         goal = state[:, :, 0]
         current = state[:, :, 1]
         noise_angles = (np.random.normal(0, noise_lvl, size=3))
-        print(noise_angles)
+        # print(noise_angles)
         current = euler_angles_to_rotation_matrix(*np.deg2rad(noise_angles % (2 * np.pi))) @ current
         # relative = goal @ current.T
         # rpy = np.rad2deg(rotation_matrix_to_euler_angles(relative))
