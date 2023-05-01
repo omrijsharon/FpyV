@@ -1,6 +1,7 @@
 import serial
 import numpy as np
 import matplotlib.pyplot as plt
+from time import sleep
 
 def check_which_port():
     import serial.tools.list_ports
@@ -17,7 +18,7 @@ def get_device_port(device_name: str):
 
 def read_serial_stream():
     port = get_device_port("Uno")[0]
-    ser = serial.Serial(port, 9600, timeout=0.001)
+    ser = serial.Serial(port, 115200, timeout=0.001)
     freq_list = [5865, 5845, 5825, 5805, 5785, 5765, 5745, 5725,
                  5733, 5752, 5771, 5790, 5809, 5828, 5847, 5866,
                  5705, 5685, 5665, 5645, 5885, 5905, 5925, 5945,
@@ -37,22 +38,24 @@ def read_serial_stream():
             # ser.inWaiting()
             # line = ser.readline(64).decode('ascii')
             line = "".join(buffer)
-            print(len(buffer))
-            buffer *= 0
             # clean text
             line = line.split('\r\n')
-            freq_line = [l.split(r"\r")[0] for l in line if "Frequency: " in l]
+            # print(len(line))
+            freq_line = [l.split(r"\r")[0] for l in line if "Frequency: " in l][:-1]
             # rssi_line = [l for l in line if "RSSI: " in l]
-            if len(freq_line) > 0:
+            if len(freq_line) > 41:
+                buffer *= 0
                 try:
-                    freq_line_list = [int(l.split(" MHz")[0].split("Frequency: ")[-1]) for l in freq_line]
+                    freq_line_list = [int(l.split(" MHz,")[0].split("Frequency: ")[-1]) for l in freq_line]
                     rssi_line_list = [int(l.split(" dBm")[0].split("RSSI: ")[-1]) for l in freq_line]
                     for freq, rssi in zip(freq_line_list, rssi_line_list):
                         freq_rssi_dict[freq] = rssi
+                        print(freq, rssi)
                 except:
+                    pass
                     print(freq_line)
-            plt.bar(freq_rssi_dict.keys(), freq_rssi_dict.values())
-            plt.ylim(0, 20)
+            plt.bar(freq_rssi_dict.keys(), freq_rssi_dict.values(), width=10)
+            plt.ylim(0, 50)
             plt.pause(0.000001)
     except KeyboardInterrupt:
         print("KeyboardInterrupt")

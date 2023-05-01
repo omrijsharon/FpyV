@@ -1,10 +1,11 @@
 import serial
 import numpy as np
 import matplotlib.pyplot as plt
-
+import tkinter as tk
+from tkinter import ttk
 from utils.helper_functions import quaternion_to_rotation_matrix
 from utils.render3d import init_3d_axis, plot_3d_rotation_matrix, show_plot, plot_3d_line, plot_3d_points
-
+from utils.port_selector import PortSelector
 
 def check_which_port():
     import serial.tools.list_ports
@@ -34,9 +35,13 @@ def count_elements_in_str_line(line):
     else:
         return 0
 
+
 def read_serial_stream():
+    port_selector = PortSelector()
+    selected_port = port_selector.run()
     # Open serial port
-    ser = serial.Serial(get_leonardo_port(), 115200, timeout=0.001)
+    # ser = serial.Serial(get_leonardo_port(), 115200, timeout=0.001)
+    ser = serial.Serial(selected_port, 115200, timeout=0.001)
     ax, fig = init_3d_axis()
     points = np.zeros(shape=(3,))
     points_list = np.zeros(shape=(3,))
@@ -95,7 +100,7 @@ def read_serial_stream():
                     rot_mat_line = rot_mat_line[-1]
                 else:
                     rot_mat_line = rot_mat_line[-2]
-                print(rot_mat_line)
+                # print(rot_mat_line)
                 # Parse data
                 rot_mat_line = rot_mat_line.replace('Rotation matrix: ', '')
                 R = np.array([float(x) / 16384.0 for x in rot_mat_line.split()]).reshape(3, 3)
