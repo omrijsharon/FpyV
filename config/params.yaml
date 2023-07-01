@@ -18,7 +18,7 @@ simulator:
       radius: 25 # meters
       resolution: 5500 # points in total
   obstacles:
-    count: 0 # number of obstacles
+    count: 5 # number of obstacles
     center: [0, 0, 0] # meters
     center_std: [10,10,0] # meters
     radius: 2 # meters
@@ -39,12 +39,13 @@ drone:
   joystick_calib_path: C:\Users\omri_\PycharmProjects\FpyV\config\frsky.json # path to joystick calibration file
   motor_test_report_path: C:\Users\omri_\PycharmProjects\FpyV\config\t_motos_f80_motor_test.csv # path to motor test report file
   motor_test_report_idx: 0 # index of motor in report file
-  initial_position: [0, 0, 5] # meters
+  initial_position: [0, 0, 10] # meters
   initial_orientation: [0, 0, 0] # roll pitch yaw in degrees
   initial_velocity: [1, 0, 0] # m/s
-  max_rates: 1000 # degrees/s
-  mass: 250 # grams
-  drag_coefficient: 0.2
+  max_rates: 200 # degrees/s
+  mass: 750 # grams
+  drag_coefficients: [1.8, 1.8, 1.2] # drag coefficients in x, y, z (Cd)
+  dimensions: [26, 30, 5] # x, y, z in cm (used for cross section area calculation)
   motors_test_filepath: "config/motors_test_params.csv"
   rates_transition_rate: 0.7 # smaller value reacts slower [0, 1]
   thrust_transition_rate: 0.5 # instant power: smaller value reacts slower [0, 1]
@@ -61,9 +62,9 @@ drone:
     derivative_transition_rate: 0.2 # Replacing Feedforward. Smaller value reacts slower but smoother [0, 1]
 
 camera:
-  camera_angle: 25.0 #degrees - pitch angle
+  camera_angle: 35.0 #degrees - pitch angle
   position_relative_to_frame: [0.1, 0.0, 0.0] #meters
-  fov: 140.0 #degrees
+  fov: 120.0 #degrees
   resolution: [640, 480] #pixels
 
 

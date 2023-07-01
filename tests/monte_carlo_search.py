@@ -81,6 +81,6 @@ if __name__ == '__main__':
                 render3d.plot_3d_points(ax, state_list[i], s=1, c=colors[i].reshape(1, 3), alpha=0.5)
         if t % 10 == 0:
             render3d.plot_3d_points(ax, first_states, s=100, c='k', alpha=0.5)
-            render3d.show_plot(ax, fig, edge=3.2)
+            render3d.show_plot(ax, fig, edge=6.2)
     plt.show()
 

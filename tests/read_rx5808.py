@@ -17,7 +17,8 @@ def get_device_port(device_name: str):
 
 
 def read_serial_stream():
-    port = get_device_port("Uno")[0]
+    # port = get_device_port("Uno")[0]
+    port = "COM32"
     ser = serial.Serial(port, 115200, timeout=0.001)
     freq_list = [5865, 5845, 5825, 5805, 5785, 5765, 5745, 5725,
                  5733, 5752, 5771, 5790, 5809, 5828, 5847, 5866,
@@ -55,7 +56,7 @@ def read_serial_stream():
                     pass
                     print(freq_line)
             plt.bar(freq_rssi_dict.keys(), freq_rssi_dict.values(), width=10)
-            plt.ylim(0, 50)
+            plt.ylim(0, 300)
             plt.pause(0.000001)
     except KeyboardInterrupt:
         print("KeyboardInterrupt")

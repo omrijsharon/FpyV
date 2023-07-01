@@ -127,10 +127,11 @@ if __name__ == '__main__':
             target_img = drone.camera.render_depth_image([targets[target_chase_idx]], max_depth=25)
             target_pixels = np.array(np.where(target_img > 0))
             # target_pixels = np.array([ix, iy])
-            if target_pixels.shape[1] == 0:
+            # if target_pixels.shape[1] == 0:
             # if target_pixels[0] == -1:
+            if 1==0:
                 print("lost target")
-                drone.step(action=action, wind_velocity_vector=wind_velocity_vector, object_list=object_list, rotation_matrix=None, thrust_force=None)
+                # drone.step(action=action, wind_velocity_vector=wind_velocity_vector, object_list=object_list, rotation_matrix=None, thrust_force=None)
             else:
                 target_pixels = target_pixels.mean(1)[::-1]
                 target_pixels[0] += 0
@@ -140,7 +141,7 @@ if __name__ == '__main__':
                 pns_action[1] = -0.5
                 pns_action[2] = -0.5
                 pns_action[3] = -0.1
-                rot_mat, force_size = drone.point_and_shoot(target_pixels, action=pns_action, mode="level")
+                # rot_mat, force_size = drone.point_and_shoot(target_pixels, action=pns_action, mode="level") # FIX!!!
                 # rot_mat, force_size = drone.calculate_needed_force_orientation(target_pixels, targets[target_chase_idx], mode="frontarget")
                 prune_object_list = drone.camera.pruned_objects_list(object_list)
                 # bbox2d_list = drone.camera.bbox2d(drone.camera.pruned_objects_list(prune_object_list))
@@ -156,7 +157,8 @@ if __name__ == '__main__':
 
                 img = cv2.putText(img.astype(np.uint8), f"dist2target: {distance(drone, targets[0]):.2f} m, "
                                                         f"velocity: {3.6 * np.linalg.norm(drone.velocity):.2f} kph, "
-                                                        f"throttle: {100 * (drone.thrust2throttle(force_size) + 1) / 2 :.2f} %, " 
+                                                        # f"throttle: {100 * (drone.thrust2throttle(force_size) + 1) / 2 :.2f} %, "
+                                                        f"throttle: {100 * (drone.throttle + 1) / 2 :.2f} %, "
                                                         f"height: {drone.camera.position[2]:.2f} m",
                                   (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
             if i % 2 == 0:

@@ -34,10 +34,12 @@ def drag_coefficient(coefficient_vector, rotation_matrix, air_velocity):
     return coefficient_vector[0] + coefficient_vector[1] * np.dot(rotation_matrix[2, :], air_velocity) + coefficient_vector[2] * np.linalg.norm(air_velocity) #???
 
 
-def calculate_drag(cart_state, wind_velocity_vector, drag_coefficient=0.5, air_density=1.2225):
+def calculate_drag(rotation_matrix, velocity, wind_velocity_vector, drag_coefficients, cross_section_areas, air_density=1.2225):
     # air_density = 1.2225 [kg/m^3] at 20 degrees C
-    velocity = cart_state[3:] + wind_velocity_vector
-    return -0.5 * drag_coefficient * air_density * velocity * np.linalg.norm(velocity) # *area
+    velocity_sum = velocity + wind_velocity_vector
+    drag_force_self_ref_frame = -0.5 * drag_coefficients * air_density * cross_section_areas * (rotation_matrix.T @ velocity_sum) * np.linalg.norm(velocity_sum)
+    print(drag_force_self_ref_frame)
+    return rotation_matrix @ drag_force_self_ref_frame # drag force in world reference frame
 
 
 def gravity_vector(mass, g=9.81):

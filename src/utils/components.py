@@ -87,6 +87,7 @@ class Drone:
         self.rotation_matrix = None # R [3x3] in 3d
         self.acceleration = None
         self.rates = None
+        self.throttle = None
         self.thrust = None
         self.gravity = params["simulator"]["gravity"]
         self.gravity_force = None
@@ -94,7 +95,9 @@ class Drone:
         self.total_forces = None
         self.dt = 1/params["simulator"]["fps"]
         self.mass = params["drone"]["mass"] / 1000 #kg
-        self.drag_coef = params["drone"]["drag_coefficient"]
+        self.drag_coef = np.array(params["drone"]["drag_coefficients"])
+        self.dimensions = np.array(params["drone"]["dimensions"]) / 100 # meters
+        self.cross_section_areas = np.array([self.dimensions[1]*self.dimensions[2], self.dimensions[0]*self.dimensions[2], self.dimensions[0]*self.dimensions[1]]) # m^2
         self.thrust_multiplier = 80
         self.prev_rates = None
         self.prev_thrust = None
@@ -180,12 +183,13 @@ class Drone:
         :return: thrust [3x1], rates [3x1]  in world reference frame
         """
         action2rates = np.clip(-action[:self.dim] * self.max_rates, -self.max_rates, self.max_rates)
+        self.throttle = action[self.dim]
         rates = action2rates * self.rates_transition_rate + \
                 self.prev_rates * (1 - self.rates_transition_rate)
         self.prev_rates = rates
         # thrust_scalar = np.clip((action[self.dim] + 1) / 2, 0, 1) * self.thrust_multiplier * self.thrust_transition_rate + \
         #                 self.prev_thrust * (1 - self.thrust_transition_rate)
-        thrust_scalar = self.throttle2thrust(action[self.dim]) * self.thrust_transition_rate + \
+        thrust_scalar = self.throttle2thrust(self.throttle) * self.thrust_transition_rate + \
                         self.prev_thrust * (1 - self.thrust_transition_rate)
         self.prev_thrust = thrust_scalar
         trust = kinematics.thrust_vector(thrust_scalar, self.rotation_matrix)
@@ -223,7 +227,10 @@ class Drone:
         if action is None:
             action = self.read_sticks()
         self.thrust, self.rates = self.action2force(action)
-        self.drag_force = kinematics.calculate_drag(self.state, wind_velocity_vector, self.drag_coef)
+        if rotation_matrix is not None:
+            self.rotation_matrix = rotation_matrix
+            self.thrust = kinematics.thrust_vector(thrust_force, self.rotation_matrix)
+        self.drag_force = kinematics.calculate_drag(self.rotation_matrix, self.state[3:], wind_velocity_vector, self.drag_coef, self.cross_section_areas)
         self.gravity_force = kinematics.gravity_vector(self.mass, g=self.gravity)
         self.motors_orientation = self.motors_relative_position @ self.rotation_matrix.T
         force_applied_on_motors, self.done, msgs = self.handle_collisions(object_list)
@@ -232,9 +239,6 @@ class Drone:
         if np.any((self.position + self.motors_orientation)[:, 2] < 0.0):
             self.done = True
         # Just a test for go-to-pixel algorithm
-        if rotation_matrix is not None:
-            self.rotation_matrix = rotation_matrix
-            self.thrust = kinematics.thrust_vector(thrust_force, self.rotation_matrix)
         self.total_forces = self.thrust + self.gravity_force + self.drag_force + force_applied_on_motors
         self.acceleration = self.total_forces / self.mass
         self.update()
