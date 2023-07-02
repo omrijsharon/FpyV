@@ -30,10 +30,6 @@ def rotate_body_by_rates(rotation_matrix, rates, dt): # rates in degrees per sec
     return (euler_angles_to_rotation_matrix(*rates_dt) @ rotation_matrix.T).T
 
 
-def drag_coefficient(coefficient_vector, rotation_matrix, air_velocity):
-    return coefficient_vector[0] + coefficient_vector[1] * np.dot(rotation_matrix[2, :], air_velocity) + coefficient_vector[2] * np.linalg.norm(air_velocity) #???
-
-
 def calculate_drag(rotation_matrix, velocity, wind_velocity_vector, drag_coefficients, cross_section_areas, air_density=1.2225):
     # air_density = 1.2225 [kg/m^3] at 20 degrees C
     velocity_sum = velocity + wind_velocity_vector
